@@ -1,0 +1,34 @@
+#+TITLE: Common Lisp "Hello, world!" application
+#+AUTHOR: Philippe Crama
+
+* Introduction
+
+Minimal web application to learn web application programming in Common Lisp
+
+* Installation
+
+** SBCL: a Common Lisp implementation and libraries
+#+begin_src shell :exports code
+  sudo apt install sbcl
+  curl https://beta.quicklisp.org/quicklisp.lisp > /tmp/quicklisp.lisp
+  curl https://beta.quicklisp.org/quicklisp.lisp.asc > /tmp/quicklisp.lisp.asc
+  sbcl --load /tmp/quicklisp.lisp
+#+end_src
+
+Quicklisp proposes these installation instructions which I applied using
+~(ql:add-to-init-file)~:
+#+begin_example
+  #-quicklisp
+  (let ((quicklisp-init (merge-pathnames "quicklisp/setup.lisp"
+                                         (user-homedir-pathname))))
+    (when (probe-file quicklisp-init)
+      (load quicklisp-init)))
+#+end_example
+
+I restarted sbcl, then installed hunchentoot and cl-who.
+
+* Usage
+
+** Environment variables
+
+| CL_METER_READINGS_STATIC_DIRECTORY | path to static/ directory |
