@@ -62,7 +62,14 @@ form {
                    (:input :type "text" :id name :name name :placeholder placeholder :value value :pattern pattern))))
                (meter-reading (name label &key value)
                  (input-row name label "Empty field or positive number with at most one decimal" :value value :pattern "^ *(|\\d+([.,]\\d)?) *$")))
-        (input-row "timestamp" "Timestamp" "yyyy/mm/dd HH:MM[:SS] (in your local timezone)" :value "2023-06-14 07:05" :pattern " *2[01][0-9][0-9]-(1[0-2]|0?[0-9])-(3[01]|[0-2]?[0-9]) (2[0-3]|[01]?[0-9]):[0-5][0-9](:[0-5][0-9])? *")
+        (input-row "timestamp"
+                   "Timestamp"
+                   "dd/mm/yyyy HH:MM[:SS] (in your local timezone)"
+                   :value (multiple-value-bind (_seconds minutes hours day month year)
+	                      (get-decoded-time)
+                            (declare (ignore _seconds))
+	                    (format nil "~2,'0D/~2,'0D/~4,'0D ~2,'0D:~2,'0D" day month year hours minutes))
+                   :pattern " *(3[01]|[0-2]?[0-9])/(1[0-2]|0?[0-9])/2[01][0-9][0-9] (2[0-3]|[01]?[0-9]):[0-5][0-9](:[0-5][0-9])? *")
         (meter-reading "pv_2022_prod_kWh" "PV 2022 production [kWh]" :value "1484.3")
         (meter-reading "pv_2012_prod_kWh" "PV 2012 production [kWh]")
         (meter-reading "peak_hour_consumption_kWh" "1.8.1 Peak hour consumption [kWh]")
@@ -77,7 +84,8 @@ form {
 
 
 (defclass meter-readings-20220815 ()
-  ((pv-2022-prod-kWh :initarg :pv-2022-prod-kWh :initform nil :accessor pv-2022-prod-kWh :documentation "PV 2022 production [kWh]")
+  ((timestamp :initarg :timestamp :accessor reading-timestamp :documentation "Seconds since UNIX epoch [s]")
+   (pv-2022-prod-kWh :initarg :pv-2022-prod-kWh :initform nil :accessor pv-2022-prod-kWh :documentation "PV 2022 production [kWh]")
    (pv-2012-prod-kWh :initarg :pv-2012-prod-kWh :initform nil :accessor pv-2012-prod-kWh :documentation "PV 2012 production [kWh]")
    (peak-hour-consumption-kWh :initarg :peak-hour-consumption-kWh :initform nil :accessor peak-hour-consumption-kWh :documentation "1.8.1 Peak hour consumption [kWh]")
    (off-hour-consumption-kWh :initarg :off-hour-consumption-kWh :initform nil :accessor off-hour-consumption-kWh :documentation "1.8.2 Off hour consumption [kWh]")
@@ -99,10 +107,66 @@ form {
               ((null separator) (coerce integer-part 'double-float))
               (t (error "Could not parse ~S" s)))))))
 
+
+(defconstant +unix-epoch+ (encode-universal-time 0 0 0 1 1 1970 0))
+
+
+(defun parse-user-timestamp (s &optional time-zone)
+  "Parse S yyyy/mm/dd hh:mm[:ss] with optional TIME-ZONE into offset from Unix epoch"
+  (setq s (string-right-trim '(#\space #\tab) s))
+  (flet ((check-bounds (name lower-incl value upper-incl)
+           (unless (and (integerp value) (<= lower-incl value upper-incl))
+             (error "Bad ~A: ~A is not in [~A, ~A]" name value lower-incl upper-incl)))
+         (check-separator (next expected)
+           (unless (eql (char s next) expected)
+             (error "Bad separator ~S at index ~A: expected ~S" (char s next) next expected))))
+    (multiple-value-bind (day next)
+        (parse-integer s :junk-allowed t)
+      (check-bounds "day" 1 day 31)
+      (check-separator next #\/)
+      (multiple-value-bind (month next)
+          (parse-integer s :start (1+ next) :junk-allowed t)
+        (check-bounds "month" 1 month 12)
+        (check-separator next #\/)
+        (multiple-value-bind (year next)
+            (parse-integer s :start (1+ next) :junk-allowed t)
+          (check-bounds "year" 1970 year 2199)
+          (unless (<= day (ecase month
+                            ((1 3 5 7 8 10 12) 31)
+                            ((4 6 9 11) 30)
+                            (2 (if (or (plusp (mod year 4))
+                                       (and (zerop (mod year 100)) (plusp (mod year 400))))
+                                   28
+                                   29))))
+            (error "Bad date ~4'0D-~2,'0D-~2,'0D" year month day))
+          (check-separator next #\space)
+          (multiple-value-bind (hour next)
+              (parse-integer s :start (1+ next) :junk-allowed t)
+            (check-bounds "hour" 0 hour 23)
+            (check-separator next #\:)
+            (multiple-value-bind (minute next)
+                (parse-integer s :start (1+ next) :junk-allowed t)
+              (check-bounds "minute" 0 minute 59)
+              (let ((second
+                      (if (>= next (length s))
+                          0
+                          (progn
+                            (check-separator next #\:)
+                            (multiple-value-bind (second next)
+                                (parse-integer s :start (1+ next) :junk-allowed t)
+                              (check-bounds "second" 0 second 59)
+                              (unless (>= next (length s))
+                                (error "No data after second allowed at index ~A" next))
+                              second)))))
+                (- (encode-universal-time second minute hour day month year time-zone)
+                   +unix-epoch+)))))))))
+
+
 ;; use drakma as HTTP client?
 
 (defun handle-form-request (request)
-  (let* ((pv-2022-prod-kWh (parse-float (hunchentoot:parameter "pv_2022_prod_kWh" request)))
+  (let* ((timestamp (parse-user-timestamp (hunchentoot:parameter "timestamp" request)))
+         (pv-2022-prod-kWh (parse-float (hunchentoot:parameter "pv_2022_prod_kWh" request)))
          (pv-2012-prod-kWh (parse-float (hunchentoot:parameter "pv_2012_prod_kWh" request)))
          (peak-hour-consumption-kWh (parse-float (hunchentoot:parameter "peak_hour_consumption_kWh" request)))
          (off-hour-consumption-kWh (parse-float (hunchentoot:parameter "off_hour_consumption_kWh" request)))
@@ -112,6 +176,7 @@ form {
          (water-m3 (parse-float (hunchentoot:parameter "water_m3" request)))
          (meter-reading (make-instance
                          'meter-readings-20220815
+                         :timestamp timestamp
                          :pv-2022-prod-kWh pv-2022-prod-kWh
                          :pv-2012-prod-kWh pv-2012-prod-kWh
                          :peak-hour-consumption-kWh peak-hour-consumption-kWh
@@ -133,15 +198,19 @@ form {
       (:body
        (:h1 "Reading")
        (:p (cl-who:str
-            (format nil
-                    "Received reading: ~a"
-                    (mapcar (lambda (accessor) (funcall accessor meter-reading))
-                            (list #'pv-2022-prod-kWh #'pv-2012-prod-kWh
-                                  #'peak-hour-consumption-kWh
-                                  #'off-hour-consumption-kWh
-                                  #'peak-hour-injection-kWh
-                                  #'off-hour-injection-kWh
-                                  #'gas-m3 #'water-m3)))))))))
+            (flet ((time-xsor (mr)
+                     (multiple-value-bind (ss mm hh dy mo ye)
+                         (decode-universal-time (+ (reading-timestamp mr) +unix-epoch+) -2)
+                       (format nil "~2,'0D/~2,'0D/~D ~2,'0D:~2,'0D:~2,'0D" dy mo ye hh mm ss))))
+              (format nil
+                      "Received reading: ~a"
+                      (mapcar (lambda (accessor) (funcall accessor meter-reading))
+                              (list #'time-xsor #'pv-2022-prod-kWh #'pv-2012-prod-kWh
+                                    #'peak-hour-consumption-kWh
+                                    #'off-hour-consumption-kWh
+                                    #'peak-hour-injection-kWh
+                                    #'off-hour-injection-kWh
+                                    #'gas-m3 #'water-m3))))))))))
 
 
 (hunchentoot:define-easy-handler (submit-handler :uri "/cl-meter-readings/submit") ()
