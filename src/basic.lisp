@@ -2,6 +2,8 @@
 (ql:quickload "cl-who")
 (ql:quickload "hunchentoot")
 
+(load "data")
+
 (eval-when (:compile-toplevel :execute :load-toplevel)
   (setf (cl-who:html-mode) :html5))
 
@@ -164,6 +166,7 @@ form {
 
 ;; use drakma as HTTP client?
 
+
 (defun handle-form-request (request)
   (let* ((timestamp (parse-user-timestamp (hunchentoot:parameter "timestamp" request)))
          (pv-2022-prod-kWh (parse-float (hunchentoot:parameter "pv_2022_prod_kWh" request)))
@@ -186,6 +189,10 @@ form {
                          :gas-m3 gas-m3
                          :water-m3 water-m3)))
     ;; Process the reading (store it in a database, etc.)
+    (save-reading meter-reading))
+  ;; view: generate response
+  (multiple-value-bind (readings-count most-recent)
+      (get-count-and-most-recent-reading)
     (cl-who:with-html-output-to-string (*standard-output*)
       (:head
        (:meta :charset "UTF-8")
@@ -197,20 +204,26 @@ form {
        (:style (cl-who:str +css-styling+)))
       (:body
        (:h1 "Reading")
-       (:p (cl-who:str
-            (flet ((time-xsor (mr)
-                     (multiple-value-bind (ss mm hh dy mo ye)
-                         (decode-universal-time (+ (reading-timestamp mr) +unix-epoch+) -2)
-                       (format nil "~2,'0D/~2,'0D/~D ~2,'0D:~2,'0D:~2,'0D" dy mo ye hh mm ss))))
-              (format nil
-                      "Received reading: ~a"
-                      (mapcar (lambda (accessor) (funcall accessor meter-reading))
-                              (list #'time-xsor #'pv-2022-prod-kWh #'pv-2012-prod-kWh
-                                    #'peak-hour-consumption-kWh
-                                    #'off-hour-consumption-kWh
-                                    #'peak-hour-injection-kWh
-                                    #'off-hour-injection-kWh
-                                    #'gas-m3 #'water-m3))))))))))
+       (if (zerop readings-count)
+           (cl-who:htm (:p "No data yet"))
+           (cl-who:htm (:p (cl-who:str
+                            (flet ((time-xsor (mr)
+                                     (multiple-value-bind (ss mm hh day mon yer)
+                                         (decode-universal-time (+ (reading-timestamp mr) +unix-epoch+) -2)
+                                       (format nil "~2,'0D/~2,'0D/~D ~2,'0D:~2,'0D:~2,'0D" day mon yer hh mm ss))))
+                              (format nil
+                                      "Most recent reading of ~A reading(s): ~A"
+                                      readings-count
+                                      (mapcar (lambda (accessor) (funcall accessor most-recent))
+                                              (list #'time-xsor
+                                                    #'pv-2022-prod-kWh
+                                                    #'pv-2012-prod-kWh
+                                                    #'peak-hour-consumption-kWh
+                                                    #'off-hour-consumption-kWh
+                                                    #'peak-hour-injection-kWh
+                                                    #'off-hour-injection-kWh
+                                                    #'gas-m3
+                                                    #'water-m3))))))))))))
 
 
 (hunchentoot:define-easy-handler (submit-handler :uri "/cl-meter-readings/submit") ()

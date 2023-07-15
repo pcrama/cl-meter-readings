@@ -34,3 +34,4 @@ I restarted sbcl, then installed hunchentoot and cl-who.
 | TZ                                 | unset                     |
 | LC_TIME                            | =fr_BE.UTF-8=             |
 | CL_METER_READINGS_STATIC_DIRECTORY | path to static/ directory |
+| CL_METER_READINGS_DATA_FILE        | path to data-file         |
