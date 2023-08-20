@@ -1,3 +1,15 @@
+(defclass meter-readings-20220815 ()
+  ((timestamp :initarg :timestamp :accessor reading-timestamp :documentation "Seconds since UNIX epoch [s]")
+   (pv-2022-prod-kWh :initarg :pv-2022-prod-kWh :initform nil :accessor pv-2022-prod-kWh :documentation "PV 2022 production [kWh]")
+   (pv-2012-prod-kWh :initarg :pv-2012-prod-kWh :initform nil :accessor pv-2012-prod-kWh :documentation "PV 2012 production [kWh]")
+   (peak-hour-consumption-kWh :initarg :peak-hour-consumption-kWh :initform nil :accessor peak-hour-consumption-kWh :documentation "1.8.1 Peak hour consumption [kWh]")
+   (off-hour-consumption-kWh :initarg :off-hour-consumption-kWh :initform nil :accessor off-hour-consumption-kWh :documentation "1.8.2 Off hour consumption [kWh]")
+   (peak-hour-injection-kWh :initarg :peak-hour-injection-kWh :initform nil :accessor peak-hour-injection-kWh :documentation "2.8.1 Peak hour injection [kWh]")
+   (off-hour-injection-kWh :initarg :off-hour-injection-kWh :initform nil :accessor off-hour-injection-kWh :documentation "2.8.2 Off hour injection [kWh]")
+   (gas-m3 :initarg :gas-m3 :initform nil :accessor gas-m3 :documentation "Gas [m³]")
+   (water-m3 :initarg :water-m3 :initform nil :accessor water-m3 :documentation "Water [m³]")))
+
+
 (defmacro with-data-file ((stream &rest rest &key (direction :input) if-exists if-does-not-exist) &body body)
   (declare (ignorable direction if-exists if-does-not-exist))
   `(with-open-file (,stream
@@ -5,6 +17,17 @@
                         "meter-readings.data")
                     ,@rest)
      ,@body))
+
+
+(defun read-meter-reading-from-stream (stream)
+  (let* ((stream-data (ignore-errors (read stream)))
+         (type (getf stream-data :type))
+         (data (getf stream-data :data))
+         (timestamp (getf data :timestamp)))
+    (unless (or (null type) (null data) (null timestamp))
+      (case type
+        (:meter-readings-20220815
+         (apply #'make-instance 'meter-readings-20220815 data))))))
 
 
 (defun get-count-and-most-recent-reading ()
@@ -19,17 +42,6 @@
           when (or (null most-recent)
                    (>= (reading-timestamp reading) (reading-timestamp most-recent)))
             do (setf most-recent reading))))
-
-
-(defun read-meter-reading-from-stream (stream)
-  (let* ((stream-data (ignore-errors (read stream)))
-         (type (getf stream-data :type))
-         (data (getf stream-data :data))
-         (timestamp (getf data :timestamp)))
-    (unless (or (null type) (null data) (null timestamp))
-      (case type
-        (:meter-readings-20220815
-         (apply #'make-instance 'meter-readings-20220815 data))))))
 
 
 (defun save-reading-to-stream (stream meter-reading)
