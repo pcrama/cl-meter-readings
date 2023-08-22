@@ -1,12 +1,64 @@
 (ql:quickload "uiop")
 (ql:quickload "cl-who")
 (ql:quickload "hunchentoot")
+(ql:quickload "drakma")
+(ql:quickload "cl-json")
+
+(defpackage :cl-meter-readings
+  (:use :cl))
+
+(in-package :cl-meter-readings)
 
 (load "data")
 
 (eval-when (:compile-toplevel :execute :load-toplevel)
   (setf (cl-who:html-mode) :html5))
 
+(defvar *sma-inverter-host*
+  (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_HOST"))
+
+(defvar *sma-inverter-path*
+  (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_PATH"))
+
+(defun descend-json (json path)
+  (if (null path)
+      json
+      (destructuring-bind (head &rest tail) path
+        (if (functionp head)
+            (descend-json (funcall head json) tail)
+            (descend-json (cdr (assoc head json)) tail)))))
+
+(defun get-sma-inverter-total-production (inverter-ip)
+  (format t "inverter-ip=~S" inverter-ip)
+  (when (and (stringp inverter-ip) (stringp *sma-inverter-path*))
+    (multiple-value-bind (response status-code)
+        ;; TODO: SSL
+        (drakma:http-request (format nil "https://~A/~A" inverter-ip *sma-inverter-path*) :decode-content :utf-8)
+      (when (= status-code 200)
+        (let* ((json (json:decode-json-from-string (flexi-streams:octets-to-string response)))
+               (total-production (descend-json json (list :result :0199-XXXXX-9-+BD+ :+6400-00260100+ :|1| #'first :val))))
+          (when (numberp total-production)
+            (/ (round total-production 100.0) 10.0)))))))
+
+(defvar *sma-inverter-static-ip*
+  (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_STATIC_IP")
+  "For local testing purposes")
+
+(defvar *dhcp-leases-file*
+  (uiop:getenv "CL_METER_READINGS_DHCP_LEASES")
+  "Path to file containing DHCP leases: whitespace separated rows with 3rd column=IP address, 4th column=host name")
+
+(defun get-sma-inverter-ip ()
+  (or (when (and *sma-inverter-host* *dhcp-leases-file*)
+        (with-open-file (stream *dhcp-leases-file* :direction :input)
+          (loop for line = (read-line stream nil)
+                while line
+                for parts = (uiop:split-string line)
+                when (let ((hostname (fourth line)))
+                       (and (stringp hostname)
+                            (string= hostname *sma-inverter-host*)))
+                  return (third line))))
+      *sma-inverter-static-ip*))
 
 (defconstant +css-styling+
   "/* CSS styles for the form */
@@ -54,36 +106,38 @@ form {
       (:link :rel "icon" :type "image/png" :sizes "16x16" :href "/cl-meter-readings/favicon-16x16.png")
       (:link :rel "manifest" :href "/cl-meter-readings/site.webmanifest")
       (:style (cl-who:str +css-styling+)))
-    (:body
-     (:form
-      :action "/cl-meter-readings/submit" :method "POST"
-      (labels ((input-row (name label placeholder &key value pattern)
-                 (cl-who:htm
-                  (:div
-                   :class "input-row"
-                   (:label :for name (cl-who:str label))
-                   (:input :type "text" :id name :name name :placeholder placeholder :value value :pattern pattern))))
-               (meter-reading (name label &key value)
-                 (input-row name label "Empty field or positive number with at most one decimal" :value value :pattern "^ *(|\\d+([.,]\\d)?) *$")))
-        (input-row "timestamp"
-                   "Timestamp"
-                   "dd/mm/yyyy HH:MM[:SS] (in your local timezone)"
-                   :value (multiple-value-bind (_seconds minutes hours day month year)
-	                      (get-decoded-time)
-                            (declare (ignore _seconds))
-	                    (format nil "~2,'0D/~2,'0D/~4,'0D ~2,'0D:~2,'0D" day month year hours minutes))
-                   :pattern " *(3[01]|[0-2]?[0-9])/(1[0-2]|0?[0-9])/2[01][0-9][0-9] (2[0-3]|[01]?[0-9]):[0-5][0-9](:[0-5][0-9])? *")
-        (meter-reading "pv_2022_prod_kWh" "PV 2022 production [kWh]" :value "1484.3")
-        (meter-reading "pv_2012_prod_kWh" "PV 2012 production [kWh]")
-        (meter-reading "peak_hour_consumption_kWh" "1.8.1 Peak hour consumption [kWh]")
-        (meter-reading "off_hour_consumption_kWh" "1.8.2 Off hour consumption [kWh]")
-        (meter-reading "peak_hour_injection_kWh" "2.8.1 Peak hour injection [kWh]")
-        (meter-reading "off_hour_injection_kWh" "2.8.2 Off hour injection [kWh]")
-        (meter-reading "gas_m3" "Gas [m³]")
-        (meter-reading "water_m3" "Water [m³]"))
-      (:div
-       :class "input-row"
-       (:input :type "submit" :value "submit" :value "Confirm readings")))))))
+     (:body
+      (:form
+       :action "/cl-meter-readings/submit" :method "POST"
+       (labels ((input-row (name label placeholder &key value pattern)
+                  (cl-who:htm
+                   (:div
+                    :class "input-row"
+                    (:label :for name (cl-who:str label))
+                    (:input :type "text" :id name :name name :placeholder placeholder :value value :pattern pattern))))
+                (meter-reading (name label &key value)
+                  (input-row name label "Empty field or positive number with at most one decimal" :value value :pattern "^ *(|\\d+([.,]\\d)?) *$")))
+         (input-row "timestamp"
+                    "Timestamp"
+                    "dd/mm/yyyy HH:MM[:SS] (in your local timezone)"
+                    :value (multiple-value-bind (_seconds minutes hours day month year)
+                               (get-decoded-time)
+                             (declare (ignore _seconds))
+                             (format nil "~2,'0D/~2,'0D/~4,'0D ~2,'0D:~2,'0D" day month year hours minutes))
+                    :pattern " *(3[01]|[0-2]?[0-9])/(1[0-2]|0?[0-9])/2[01][0-9][0-9] (2[0-3]|[01]?[0-9]):[0-5][0-9](:[0-5][0-9])? *")
+         (meter-reading "pv_2022_prod_kWh"
+                        "PV 2022 production [kWh]"
+                        :value (get-sma-inverter-total-production (get-sma-inverter-ip)))
+         (meter-reading "pv_2012_prod_kWh" "PV 2012 production [kWh]")
+         (meter-reading "peak_hour_consumption_kWh" "1.8.1 Peak hour consumption [kWh]")
+         (meter-reading "off_hour_consumption_kWh" "1.8.2 Off hour consumption [kWh]")
+         (meter-reading "peak_hour_injection_kWh" "2.8.1 Peak hour injection [kWh]")
+         (meter-reading "off_hour_injection_kWh" "2.8.2 Off hour injection [kWh]")
+         (meter-reading "gas_m3" "Gas [m³]")
+         (meter-reading "water_m3" "Water [m³]"))
+       (:div
+        :class "input-row"
+        (:input :type "submit" :value "submit" :value "Confirm readings")))))))
 
 
 (defun parse-float (s)
@@ -151,9 +205,6 @@ form {
                               second)))))
                 (- (encode-universal-time second minute hour day month year time-zone)
                    +unix-epoch+)))))))))
-
-
-;; use drakma as HTTP client?
 
 
 (defun handle-form-request (request)
@@ -234,5 +285,18 @@ form {
 (defvar *acceptor* (make-instance 'hunchentoot:easy-acceptor
                                   :port 4242
                                   :document-root *static-assets-directory*))
+
+(format t
+        "~&*sma-inverter-host*=~S
+~&*sma-inverter-path*=~S
+~&*sma-inverter-static-ip*=~S
+~&*dhcp-leases-file*=~S
+~&*static-assets-directory*=~S"
+        *sma-inverter-host*
+        *sma-inverter-path*
+        *sma-inverter-static-ip*
+        *dhcp-leases-file*
+        *static-assets-directory*)
+
 
 (hunchentoot:start *acceptor*)

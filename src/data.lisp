@@ -1,3 +1,5 @@
+(in-package :cl-meter-readings)
+
 (defclass meter-readings-20220815 ()
   ((timestamp :initarg :timestamp :accessor reading-timestamp :documentation "Seconds since UNIX epoch [s]")
    (pv-2022-prod-kWh :initarg :pv-2022-prod-kWh :initform nil :accessor pv-2022-prod-kWh :documentation "PV 2022 production [kWh]")
