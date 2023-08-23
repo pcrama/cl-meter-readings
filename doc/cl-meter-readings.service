@@ -1,0 +1,21 @@
+# /etc/systemd/system/cl-meter-readings.service
+[Unit]
+Description=Common Lisp Meter Readings application
+After=syslog.target network.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+Environment="TZ=<your local timezone>"
+Environment="CL_METER_READINGS_DHCP_LEASES=/etc/pihole/dhcp.leases"
+Environment="CL_METER_READINGS_SMA_INVERTER_HOST=SMA3xxxxxxxx5"
+Environment="CL_METER_READINGS_SMA_INVERTER_PATH=dyn/getDashValues.json"
+Environment="CL_METER_READINGS_STATIC_DIRECTORY=./static/"
+WorkingDirectory=/home/pi/cl-meter-readings
+ExecStart=/usr/bin/sbcl --core app.core
+RestartSec=120
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

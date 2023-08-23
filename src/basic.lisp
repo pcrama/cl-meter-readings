@@ -14,11 +14,11 @@
 (eval-when (:compile-toplevel :execute :load-toplevel)
   (setf (cl-who:html-mode) :html5))
 
-(defvar *sma-inverter-host*
-  (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_HOST"))
+(defvar *sma-inverter-host* nil
+  "Initialized from CL_METER_READINGS_SMA_INVERTER_HOST")
 
-(defvar *sma-inverter-path*
-  (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_PATH"))
+(defvar *sma-inverter-path* nil
+  "Initialized from CL_METER_READINGS_SMA_INVERTER_PATH")
 
 (defun descend-json (json path)
   (if (null path)
@@ -29,7 +29,6 @@
             (descend-json (cdr (assoc head json)) tail)))))
 
 (defun get-sma-inverter-total-production (inverter-ip)
-  (format t "inverter-ip=~S" inverter-ip)
   (when (and (stringp inverter-ip) (stringp *sma-inverter-path*))
     (multiple-value-bind (response status-code)
         ;; TODO: SSL
@@ -40,24 +39,26 @@
           (when (numberp total-production)
             (/ (round total-production 100.0) 10.0)))))))
 
-(defvar *sma-inverter-static-ip*
-  (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_STATIC_IP")
-  "For local testing purposes")
+(defvar *sma-inverter-static-ip* nil
+  "For local testing purposes, initialized from CL_METER_READINGS_SMA_INVERTER_STATIC_IP")
 
-(defvar *dhcp-leases-file*
-  (uiop:getenv "CL_METER_READINGS_DHCP_LEASES")
-  "Path to file containing DHCP leases: whitespace separated rows with 3rd column=IP address, 4th column=host name")
+(defvar *dhcp-leases-file* nil
+  "Path to file containing DHCP leases: whitespace separated rows with
+3rd column=IP address, 4th column=host name.
+
+Initialized from CL_METER_READINGS_DHCP_LEASES")
 
 (defun get-sma-inverter-ip ()
   (or (when (and *sma-inverter-host* *dhcp-leases-file*)
-        (with-open-file (stream *dhcp-leases-file* :direction :input)
-          (loop for line = (read-line stream nil)
-                while line
-                for parts = (uiop:split-string line)
-                when (let ((hostname (fourth line)))
-                       (and (stringp hostname)
-                            (string= hostname *sma-inverter-host*)))
-                  return (third line))))
+        (ignore-errors
+         (with-open-file (stream *dhcp-leases-file* :direction :input)
+           (loop for line = (read-line stream nil)
+                 while line
+                 for parts = (uiop:split-string line)
+                 when (let ((hostname (fourth parts)))
+                        (and (stringp hostname)
+                             (string= hostname *sma-inverter-host*)))
+                   return (third parts)))))
       *sma-inverter-static-ip*))
 
 (defconstant +css-styling+
@@ -270,33 +271,44 @@ form {
   (handle-form-request hunchentoot:*request*))
 
 
-(defvar *static-assets-directory*
-  (or (uiop:getenv "CL_METER_READINGS_STATIC_DIRECTORY")
-      (let (parent-dir)
-        (when (and *load-truename*
-                   (setq parent-dir (butlast (pathname-directory *load-truename*))))
-          (make-pathname :name nil
-                         :type nil
-                         :version nil
-                         :directory (append parent-dir '("static"))
-                         :defaults *load-truename*)))
-      #P"static/"))
+(defvar *static-assets-directory* nil
+  "Initialized from CL_METER_READINGS_STATIC_DIRECTORY")
 
-(defvar *acceptor* (make-instance 'hunchentoot:easy-acceptor
-                                  :port 4242
-                                  :document-root *static-assets-directory*))
+(defvar *acceptor* nil
+  "Hunchentoot acceptor instance, started by `main'.")
 
-(format t
-        "~&*sma-inverter-host*=~S
-~&*sma-inverter-path*=~S
-~&*sma-inverter-static-ip*=~S
-~&*dhcp-leases-file*=~S
-~&*static-assets-directory*=~S"
-        *sma-inverter-host*
-        *sma-inverter-path*
-        *sma-inverter-static-ip*
-        *dhcp-leases-file*
-        *static-assets-directory*)
+(defun main ()
+  (setf *static-assets-directory*
+        (or (uiop:getenv "CL_METER_READINGS_STATIC_DIRECTORY")
+            (let (parent-dir)
+              (when (and *load-truename*
+                         (setq parent-dir (butlast (pathname-directory *load-truename*))))
+                (make-pathname :name nil
+                               :type nil
+                               :version nil
+                               :directory (append parent-dir '("static"))
+                               :defaults *load-truename*)))
+            #P"static/")
+        *sma-inverter-host* (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_HOST")
+        *sma-inverter-path* (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_PATH")
+        *sma-inverter-static-ip* (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_STATIC_IP")
+        *dhcp-leases-file* (uiop:getenv "CL_METER_READINGS_DHCP_LEASES"))
+  (format t
+          "~&*sma-inverter-host*=~S~
+           ~&*sma-inverter-path*=~S~
+           ~&*sma-inverter-static-ip*=~S~
+           ~&*dhcp-leases-file*=~S~
+           ~&*static-assets-directory*=~S~&"
+          *sma-inverter-host*
+          *sma-inverter-path*
+          *sma-inverter-static-ip*
+          *dhcp-leases-file*
+          *static-assets-directory*)
+  (hunchentoot:start (setf *acceptor*
+                           (make-instance 'hunchentoot:easy-acceptor
+                                          :port 4242
+                                          :document-root *static-assets-directory*))))
 
-
-(hunchentoot:start *acceptor*)
+(defun main-with-sleep ()
+  (main)
+  (sleep most-positive-fixnum))

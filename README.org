@@ -27,11 +27,36 @@ Quicklisp proposes these installation instructions which I applied using
 
 I restarted sbcl, then installed hunchentoot and cl-who.
 
-* Usage
+** As a system service
 
-** Environment variables
+1. Add the [[file:doc/30-cl-meter-readings.conf][30-cl-meter-readings.conf]] file to the
+   =/etc/lighttpd/conf-available/= directory and create a symlink to enable it:
+   #+begin_src shell :exports code
+     cd /etc/lighttpd/conf-enabled
+     sudo ln -s ../conf-available/30-cl-meter-readings.conf
+   #+end_src
 
-| TZ                                 | unset                     |
-| LC_TIME                            | =fr_BE.UTF-8=             |
-| CL_METER_READINGS_STATIC_DIRECTORY | path to static/ directory |
-| CL_METER_READINGS_DATA_FILE        | path to data-file         |
+2. Enable =mod_proxy= for lighttpd.
+
+3. Put [[file:doc/cl-meter-readings.service][cl-meter-readings.service]] into the =/etc/systemd/system/= directory and
+   enable the service =sudo systemctl enable cl-meter-readings=.  Customize
+   the environment variables
+
+   | TZ                                  | unset or eg Europe/Berlin |
+   | LC_TIME                             | =fr_BE.UTF-8=             |
+   | CL_METER_READINGS_DHCP_LEASES       | path to dhcp.leases file  |
+   | CL_METER_READINGS_STATIC_DIRECTORY  | path to static/ directory |
+   | CL_METER_READINGS_DATA_FILE         | path to data-file         |
+   | CL_METER_READINGS_SMA_INVERTER_HOST | =SMA3xxxxxxxx5=           |
+   | CL_METER_READINGS_SMA_INVERTER_PATH | =dyn/getDashValues.json=  |
+
+** Deployment
+
+#+begin_src shell :exports code
+  (cd src && tar cf - *.lisp -C .. static/) \
+      | ssh pi@pi.hole 'dest_dir="$HOME/cl-meter-readings";
+                        mkdir -p "$dest_dir";
+                        tar xvf - -C "$dest_dir";
+                        cd "$dest_dir";
+                        sbcl --load basic.lisp --eval "(sb-ext:save-lisp-and-die \"$dest_dir/app.core\" :toplevel (function cl-meter-readings::main-with-sleep) :compression t)"'
+#+end_src
