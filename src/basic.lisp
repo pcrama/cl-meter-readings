@@ -141,24 +141,11 @@ form {
         (:input :type "submit" :value "submit" :value "Confirm readings")))))))
 
 
-(defun parse-float (s)
-  (unless (or (null s) (string= s ""))
-    (multiple-value-bind (integer-part index) (parse-integer s :junk-allowed t)
-      (let ((separator (when (< index (length s)) (char s index))))
-        (cond ((or (eql separator #\.) (eql separator #\,))
-               (let ((fractional-part (parse-integer s :start (1+ index))))
-                 (* (signum integer-part)
-                    (+ (abs integer-part) (/ fractional-part
-                                             (expt 10.0d0 (- (length s) index 1)))))))
-              ((null separator) (coerce integer-part 'double-float))
-              (t (error "Could not parse ~S" s)))))))
-
-
 (defconstant +unix-epoch+ (encode-universal-time 0 0 0 1 1 1970 0))
 
 
 (defun parse-user-timestamp (s &optional time-zone)
-  "Parse S yyyy/mm/dd hh:mm[:ss] with optional TIME-ZONE into offset from Unix epoch"
+  "Parse S dd/mm/yyyy hh:mm[:ss] with optional TIME-ZONE into offset from Unix epoch"
   (setq s (string-right-trim '(#\space #\tab) s))
   (flet ((check-bounds (name lower-incl value upper-incl)
            (unless (and (integerp value) (<= lower-incl value upper-incl))
@@ -219,7 +206,7 @@ form {
          (gas-m3 (parse-float (hunchentoot:parameter "gas_m3" request)))
          (water-m3 (parse-float (hunchentoot:parameter "water_m3" request)))
          (meter-reading (make-instance
-                         'meter-readings-20220815
+                         'meter-reading-202303
                          :timestamp timestamp
                          :pv-2022-prod-kWh pv-2022-prod-kWh
                          :pv-2012-prod-kWh pv-2012-prod-kWh
@@ -232,9 +219,17 @@ form {
     ;; Process the reading (store it in a database, etc.)
     (save-reading meter-reading))
   ;; view: generate response
+  (hunchentoot:redirect "/cl-meter-readings/main"))
+
+
+(hunchentoot:define-easy-handler (submit-handler :uri "/cl-meter-readings/submit") ()
+  (handle-form-request hunchentoot:*request*))
+
+
+(hunchentoot:define-easy-handler (main-page :uri "/cl-meter-readings/main") ()
   (multiple-value-bind (readings-count most-recent)
       (get-count-and-most-recent-reading)
-    (cl-who:with-html-output-to-string (*standard-output*)
+    (cl-who:with-html-output-to-string (*standard-output* nil :prologue t)
       (:head
        (:meta :charset "UTF-8")
        (:title "Input meter readings")
@@ -264,11 +259,8 @@ form {
                                                     #'peak-hour-injection-kWh
                                                     #'off-hour-injection-kWh
                                                     #'gas-m3
-                                                    #'water-m3))))))))))))
-
-
-(hunchentoot:define-easy-handler (submit-handler :uri "/cl-meter-readings/submit") ()
-  (handle-form-request hunchentoot:*request*))
+                                                    #'water-m3))))))))
+       (:p (:a :href "/cl-meter-readings/form" "Enter new meter readings") ".")))))
 
 
 (defvar *static-assets-directory* nil

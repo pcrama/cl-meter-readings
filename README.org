@@ -1,9 +1,9 @@
-#+TITLE: Common Lisp "Hello, world!" application
+#+TITLE: Common Lisp Web Application to Register Meter Readings
 #+AUTHOR: Philippe Crama
 
 * Introduction
 
-Minimal web application to learn web application programming in Common Lisp
+Minimal web application to learn web application programming in Common Lisp.
 
 * Installation
 
@@ -49,6 +49,18 @@ I restarted sbcl, then installed hunchentoot and cl-who.
    | CL_METER_READINGS_DATA_FILE         | path to data-file         |
    | CL_METER_READINGS_SMA_INVERTER_HOST | =SMA3xxxxxxxx5=           |
    | CL_METER_READINGS_SMA_INVERTER_PATH | =dyn/getDashValues.json=  |
+   | CL_METER_READINGS_SQL_PROGRAM       | =sqlite3 db.db=           |
+
+   If your database resides on a different host accessible through SSH:
+   1. Create a new key pair without a password
+   2. Add your public key on the SSH host like this:
+      #+begin_example
+        command="sed -n -e's/;.*/;/' -e '/^SELECT /p' -e '/^INSERT /p' | sqlite3 db.db",restrict ssh-rsa AAAA...w58= sqlite3-key
+      #+end_example
+   3. Set =CL_METER_READINGS_SQL_PROGRAM= like this:
+      #+begin_src shell :exports code
+        export CL_METER_READINGS_SQL_PROGRAM="ssh -o RequestTty=no -o IdentityAgent=None -F none -i /home/pi/.ssh/id_rsa_sqlite3 user@host"
+      #+end_src
 
 ** Deployment
 
@@ -60,3 +72,18 @@ I restarted sbcl, then installed hunchentoot and cl-who.
                         cd "$dest_dir";
                         sbcl --load basic.lisp --eval "(sb-ext:save-lisp-and-die \"$dest_dir/app.core\" :toplevel (function cl-meter-readings::main-with-sleep) :compression t)"'
 #+end_src
+
+* Data model
+#+begin_example
+  CREATE TABLE IF NOT EXISTS data_202303 (
+    timestamp INTEGER PRIMARY KEY ASC,
+    pv2012_kWh FLOAT,
+    pv2022_kWh FLOAT,
+    peak_conso_kWh FLOAT,
+    off_conso_kWh FLOAT,
+    peak_inj_kWh FLOAT,
+    off_inj_kWh FLOAT,
+    gas_m3 FLOAT,
+    water_m3 FLOAT
+  );
+#+end_example
