@@ -284,18 +284,21 @@ form {
         *sma-inverter-host* (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_HOST")
         *sma-inverter-path* (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_PATH")
         *sma-inverter-static-ip* (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_STATIC_IP")
-        *dhcp-leases-file* (uiop:getenv "CL_METER_READINGS_DHCP_LEASES"))
+        *dhcp-leases-file* (uiop:getenv "CL_METER_READINGS_DHCP_LEASES")
+        *sql-program* (or (uiop:getenv "CL_METER_READINGS_SQL_PROGRAM") "sqlite3 db.db"))
   (format t
           "~&*sma-inverter-host*=~S~
            ~&*sma-inverter-path*=~S~
            ~&*sma-inverter-static-ip*=~S~
            ~&*dhcp-leases-file*=~S~
-           ~&*static-assets-directory*=~S~&"
+           ~&*static-assets-directory*=~S~
+           ~&*sql-program*=~S~&"
           *sma-inverter-host*
           *sma-inverter-path*
           *sma-inverter-static-ip*
           *dhcp-leases-file*
-          *static-assets-directory*)
+          *static-assets-directory*
+          *sql-program*)
   (hunchentoot:start (setf *acceptor*
                            (make-instance 'hunchentoot:easy-acceptor
                                           :port 4242

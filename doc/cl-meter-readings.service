@@ -12,6 +12,7 @@ Environment="CL_METER_READINGS_DHCP_LEASES=/etc/pihole/dhcp.leases"
 Environment="CL_METER_READINGS_SMA_INVERTER_HOST=SMA3xxxxxxxx5"
 Environment="CL_METER_READINGS_SMA_INVERTER_PATH=dyn/getDashValues.json"
 Environment="CL_METER_READINGS_STATIC_DIRECTORY=./static/"
+Environment="CL_METER_READINGS_SQL_PROGRAM='ssh -o RequestTty=no -o IdentityAgent=None -F none -i /home/pi/.ssh/id_rsa_sqlite3 user@host'"
 WorkingDirectory=/home/pi/cl-meter-readings
 ExecStart=/usr/bin/sbcl --core app.core
 RestartSec=120

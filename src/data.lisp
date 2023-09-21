@@ -66,7 +66,7 @@
   (let ((process (uiop:launch-program command
                                       :input :stream
                                       :output :stream
-                                      :error :stream)))
+                                      :error t)))
     (when process
       ;; Get the process's standard input stream
       (let ((process-input (uiop:process-info-input process)))
