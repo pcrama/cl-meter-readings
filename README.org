@@ -75,6 +75,15 @@ I restarted sbcl, then installed hunchentoot and cl-who.
 
 * Data model
 #+begin_example
+  CREATE TABLE IF NOT EXISTS data_202208 (
+    timestamp INTEGER PRIMARY KEY ASC,
+    pv2012_kWh FLOAT,
+    pv2022_kWh FLOAT,
+    peak_conso_kWh FLOAT,
+    off_conso_kWh FLOAT,
+    gas_m3 FLOAT,
+    water_m3 FLOAT
+  );
   CREATE TABLE IF NOT EXISTS data_202303 (
     timestamp INTEGER PRIMARY KEY ASC,
     pv2012_kWh FLOAT,
