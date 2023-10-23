@@ -302,6 +302,7 @@ form {
           *sql-program*)
   (hunchentoot:start (setf *acceptor*
                            (make-instance 'hunchentoot:easy-acceptor
+                                          :address "127.0.0.1"
                                           :port 4242
                                           :document-root *static-assets-directory*))))
 
