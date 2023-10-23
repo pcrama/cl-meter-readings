@@ -30,14 +30,15 @@
 
 (defun get-sma-inverter-total-production (inverter-ip)
   (when (and (stringp inverter-ip) (stringp *sma-inverter-path*))
-    (multiple-value-bind (response status-code)
-        ;; TODO: SSL
-        (drakma:http-request (format nil "https://~A/~A" inverter-ip *sma-inverter-path*) :decode-content :utf-8)
-      (when (= status-code 200)
-        (let* ((json (json:decode-json-from-string (flexi-streams:octets-to-string response)))
-               (total-production (descend-json json (list :result :0199-XXXXX-9-+BD+ :+6400-00260100+ :|1| #'first :val))))
-          (when (numberp total-production)
-            (/ (round total-production 100.0) 10.0)))))))
+    (ignore-errors
+     (multiple-value-bind (response status-code)
+         ;; TODO: SSL
+         (drakma:http-request (format nil "https://~A/~A" inverter-ip *sma-inverter-path*) :decode-content :utf-8)
+       (when (= status-code 200)
+         (let* ((json (json:decode-json-from-string (flexi-streams:octets-to-string response)))
+                (total-production (descend-json json (list :result :0199-XXXXX-9-+BD+ :+6400-00260100+ :|1| #'first :val))))
+           (when (numberp total-production)
+             (/ (round total-production 100.0) 10.0))))))))
 
 (defvar *sma-inverter-static-ip* nil
   "For local testing purposes, initialized from CL_METER_READINGS_SMA_INVERTER_STATIC_IP")
