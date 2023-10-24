@@ -8,7 +8,6 @@ Type=simple
 User=pi
 Group=pi
 Environment="TZ=<your local timezone>"
-Environment="CL_METER_READINGS_DHCP_LEASES=/etc/pihole/dhcp.leases"
 Environment="CL_METER_READINGS_SMA_INVERTER_HOST=SMA3xxxxxxxx5"
 Environment="CL_METER_READINGS_SMA_INVERTER_PATH=dyn/getDashValues.json"
 Environment="CL_METER_READINGS_STATIC_DIRECTORY=./static/"

@@ -44,7 +44,6 @@ I restarted sbcl, then installed hunchentoot and cl-who.
 
    | TZ                                  | unset or eg Europe/Berlin |
    | LC_TIME                             | =fr_BE.UTF-8=             |
-   | CL_METER_READINGS_DHCP_LEASES       | path to dhcp.leases file  |
    | CL_METER_READINGS_STATIC_DIRECTORY  | path to static/ directory |
    | CL_METER_READINGS_DATA_FILE         | path to data-file         |
    | CL_METER_READINGS_SMA_INVERTER_HOST | =SMA3xxxxxxxx5=           |

@@ -28,39 +28,16 @@
             (descend-json (funcall head json) tail)
             (descend-json (cdr (assoc head json)) tail)))))
 
-(defun get-sma-inverter-total-production (inverter-ip)
-  (when (and (stringp inverter-ip) (stringp *sma-inverter-path*))
-    (ignore-errors
-     (multiple-value-bind (response status-code)
+(defun get-sma-inverter-total-production ()
+  (when (and (stringp *sma-inverter-host*) (stringp *sma-inverter-path*))
+    (multiple-value-bind (response status-code)
          ;; TODO: SSL
-         (drakma:http-request (format nil "https://~A/~A" inverter-ip *sma-inverter-path*) :decode-content :utf-8)
+         (drakma:http-request (format nil "https://~A/~A" *sma-inverter-host* *sma-inverter-path*) :decode-content :utf-8)
        (when (= status-code 200)
          (let* ((json (json:decode-json-from-string (flexi-streams:octets-to-string response)))
                 (total-production (descend-json json (list :result :0199-XXXXX-9-+BD+ :+6400-00260100+ :|1| #'first :val))))
            (when (numberp total-production)
-             (/ (round total-production 100.0) 10.0))))))))
-
-(defvar *sma-inverter-static-ip* nil
-  "For local testing purposes, initialized from CL_METER_READINGS_SMA_INVERTER_STATIC_IP")
-
-(defvar *dhcp-leases-file* nil
-  "Path to file containing DHCP leases: whitespace separated rows with
-3rd column=IP address, 4th column=host name.
-
-Initialized from CL_METER_READINGS_DHCP_LEASES")
-
-(defun get-sma-inverter-ip ()
-  (or (when (and *sma-inverter-host* *dhcp-leases-file*)
-        (ignore-errors
-         (with-open-file (stream *dhcp-leases-file* :direction :input)
-           (loop for line = (read-line stream nil)
-                 while line
-                 for parts = (uiop:split-string line)
-                 when (let ((hostname (fourth parts)))
-                        (and (stringp hostname)
-                             (string= hostname *sma-inverter-host*)))
-                   return (third parts)))))
-      *sma-inverter-static-ip*))
+             (/ (round total-production 100.0) 10.0)))))))
 
 (defconstant +css-styling+
   "/* CSS styles for the form */
@@ -129,7 +106,7 @@ form {
                     :pattern " *(3[01]|[0-2]?[0-9])/(1[0-2]|0?[0-9])/2[01][0-9][0-9] (2[0-3]|[01]?[0-9]):[0-5][0-9](:[0-5][0-9])? *")
          (meter-reading "pv_2022_prod_kWh"
                         "PV 2022 production [kWh]"
-                        :value (get-sma-inverter-total-production (get-sma-inverter-ip)))
+                        :value (ignore-errors (get-sma-inverter-total-production)))
          (meter-reading "pv_2012_prod_kWh" "PV 2012 production [kWh]")
          (meter-reading "peak_hour_consumption_kWh" "1.8.1 Peak hour consumption [kWh]")
          (meter-reading "off_hour_consumption_kWh" "1.8.2 Off hour consumption [kWh]")
@@ -284,20 +261,14 @@ form {
             #P"static/")
         *sma-inverter-host* (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_HOST")
         *sma-inverter-path* (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_PATH")
-        *sma-inverter-static-ip* (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_STATIC_IP")
-        *dhcp-leases-file* (uiop:getenv "CL_METER_READINGS_DHCP_LEASES")
         *sql-program* (or (uiop:getenv "CL_METER_READINGS_SQL_PROGRAM") "sqlite3 db.db"))
   (format t
           "~&*sma-inverter-host*=~S~
            ~&*sma-inverter-path*=~S~
-           ~&*sma-inverter-static-ip*=~S~
-           ~&*dhcp-leases-file*=~S~
            ~&*static-assets-directory*=~S~
            ~&*sql-program*=~S~&"
           *sma-inverter-host*
           *sma-inverter-path*
-          *sma-inverter-static-ip*
-          *dhcp-leases-file*
           *static-assets-directory*
           *sql-program*)
   (hunchentoot:start (setf *acceptor*
