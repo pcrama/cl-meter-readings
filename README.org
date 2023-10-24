@@ -95,3 +95,18 @@ I restarted sbcl, then installed hunchentoot and cl-who.
     water_m3 FLOAT
   );
 #+end_example
+
+Detect data anomalies where a meter went backwards:
+#+begin_src sql :exports code
+  select datetime(sooner.timestamp, 'unixepoch'), datetime(later.timestamp, 'unixepoch')
+  from data_202303 as later, data_202303 as sooner
+  where later.timestamp > sooner.timestamp
+        and (later.off_inj_kWh < sooner.off_inj_kWh
+             or later.off_conso_kWh < sooner.off_conso_kWh
+             or later.peak_inj_kWh < sooner.peak_inj_kWh
+             or later.peak_conso_kWh < sooner.peak_conso_kWh
+             or later.gas_m3 < sooner.gas_m3
+             or later.water_m3 < sooner.water_m3
+             or later.pv2012_kWh < sooner.pv2012_kWh
+             or later.pv2022_kWh < sooner.pv2022_kWh);
+#+end_src
