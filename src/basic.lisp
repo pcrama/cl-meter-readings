@@ -276,7 +276,13 @@ form {
                            (make-instance 'hunchentoot:easy-acceptor
                                           :address "127.0.0.1"
                                           :port 4242
-                                          :document-root *static-assets-directory*))))
+                                          :document-root *static-assets-directory*)))
+  (let ((data-202208 (get-meter-reading-202208))
+        (data-202303 (get-meter-reading-202303)))
+    (setf *data-points* (make-array (+ (length data-202208) (length data-202303))
+                                    :fill-pointer t
+                                    :initial-contents (append data-202208 data-202303))))
+  *acceptor*)
 
 (defun main-with-sleep ()
   (main)

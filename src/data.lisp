@@ -179,23 +179,33 @@
       (values (parse-integer count) (parse-sql-line-to-meter-reading-202303 meter-reading-line)))))
 
 
+(defvar *data-points* nil)
+
 (defun save-reading (meter-reading)
-  (insert-meter-reading-in-sql-table *sql-program* meter-reading))
+  (insert-meter-reading-in-sql-table *sql-program* meter-reading)
+  (when *data-points*
+    (vector-push-extend meter-reading *data-points*)))
 
 
-(defun get-meter-reading-202208 ()
+(defun get-meter-reading-202208 (&optional min-timestamp)
   (let ((data-lines
           (start-process-and-pipe-text
            *sql-program*
-           "SELECT timestamp, pv2012_kWh, pv2022_kWh, peak_conso_kWh, off_conso_kWh, gas_m3, water_m3 FROM data_202208;")))
+           (format
+            nil
+            "SELECT timestamp, pv2012_kWh, pv2022_kWh, peak_conso_kWh, off_conso_kWh, gas_m3, water_m3 FROM data_202208~@[ WHERE timestamp >= ~S~];"
+            min-timestamp))))
     (mapcar #'parse-sql-line-to-meter-reading-202208 data-lines)))
 
 
-(defun get-meter-reading-202303 ()
-  (let ((data-lines
+(defun get-meter-reading-202303 (&optional min-timestamp)
+  (let ((data-lines                     ; This is less than 100 bytes per data line.
           (start-process-and-pipe-text
            *sql-program*
-           "SELECT timestamp, pv2012_kWh, pv2022_kWh, peak_conso_kWh, off_conso_kWh, peak_inj_kWh, off_inj_kWh, gas_m3, water_m3 FROM data_202303;")))
+           (format
+            nil
+            "SELECT timestamp, pv2012_kWh, pv2022_kWh, peak_conso_kWh, off_conso_kWh, peak_inj_kWh, off_inj_kWh, gas_m3, water_m3 FROM data_202303~@[ WHERE timestamp >= ~S~];"
+            min-timestamp))))
     (mapcar #'parse-sql-line-to-meter-reading-202303 data-lines)))
 
 
