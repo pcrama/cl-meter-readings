@@ -10,6 +10,7 @@
 (in-package :cl-meter-readings)
 
 (load "data")
+(load "interpol.lisp")
 
 (eval-when (:compile-toplevel :execute :load-toplevel)
   (setf (cl-who:html-mode) :html5))
