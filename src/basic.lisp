@@ -12,6 +12,12 @@
 (load "data")
 (load "interpol.lisp")
 
+(defvar *version-comment*
+  (or (ignore-errors
+       (with-open-file (stream "version-comment.txt")
+         (read-line stream nil "empty version-comment")))
+      "dev"))
+
 (eval-when (:compile-toplevel :execute :load-toplevel)
   (setf (cl-who:html-mode) :html5))
 
@@ -117,7 +123,9 @@ form {
          (meter-reading "water_m3" "Water [m³]"))
        (:div
         :class "input-row"
-        (:input :type "submit" :value "submit" :value "Confirm readings")))))))
+        (:input :type "submit" :value "submit" :value "Confirm readings")))
+      (:hr)
+      (:p "Version: " (cl-who:esc *version-comment*))))))
 
 
 (defconstant +unix-epoch+ (encode-universal-time 0 0 0 1 1 1970 0))
@@ -260,7 +268,9 @@ form {
                             interaction: {intersect: false, axis: 'x'},
                             plugins: {title: {display: true, text: 'Meter Readings'}},
                             scales: {x: {'type': 'time'}}}};
-                    new Chart(ctx, config);"))))))))
+                    new Chart(ctx, config);")))
+        (:hr)
+        (:p "Version: " (cl-who:esc *version-comment*)))))))
 
 
 (defvar *static-assets-directory* nil
@@ -284,26 +294,29 @@ form {
         *sma-inverter-host* (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_HOST")
         *sma-inverter-path* (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_PATH")
         *sql-program* (or (uiop:getenv "CL_METER_READINGS_SQL_PROGRAM") "sqlite3 db.db"))
-  (format t
-          "~&*sma-inverter-host*=~S~
-           ~&*sma-inverter-path*=~S~
-           ~&*static-assets-directory*=~S~
-           ~&*sql-program*=~S~&"
-          *sma-inverter-host*
-          *sma-inverter-path*
-          *static-assets-directory*
-          *sql-program*)
-  (hunchentoot:start (setf *acceptor*
-                           (make-instance 'hunchentoot:easy-acceptor
-                                          :address "127.0.0.1"
-                                          :port 4242
-                                          :document-root *static-assets-directory*)))
   (let ((data-202208 (get-meter-reading-202208))
         (data-202303 (get-meter-reading-202303)))
     (setf *data-points* (make-array (+ (length data-202208) (length data-202303))
                                     :fill-pointer t
                                     :initial-contents (append data-202208 data-202303))))
-  *acceptor*)
+  (format t
+          "~&*sma-inverter-host*=~S~
+           ~&*sma-inverter-path*=~S~
+           ~&*static-assets-directory*=~S~
+           ~&*sql-program*=~S~
+           ~&*version-comment*=~S~
+           ~&~D data points~&"
+          *sma-inverter-host*
+          *sma-inverter-path*
+          *static-assets-directory*
+          *sql-program*
+          *version-comment*
+          (length *data-points*))
+  (hunchentoot:start (setf *acceptor*
+                           (make-instance 'hunchentoot:easy-acceptor
+                                          :address "127.0.0.1"
+                                          :port 4242
+                                          :document-root *static-assets-directory*))))
 
 (defun main-with-sleep ()
   (main)

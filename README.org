@@ -64,7 +64,8 @@ I restarted sbcl, then installed hunchentoot and cl-who.
 ** Deployment
 
 #+begin_src shell :exports code
-  (cd src && tar cf - *.lisp -C .. static/) \
+  git log --oneline | head -n 1 > src/version-comment.txt
+  (cd src && tar cf - version-comment.txt *.lisp -C .. static/) \
       | ssh pi@pi.hole 'dest_dir="$HOME/cl-meter-readings";
                         mkdir -p "$dest_dir";
                         tar xvf - -C "$dest_dir";
