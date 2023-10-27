@@ -209,57 +209,58 @@ form {
   (multiple-value-bind (readings-count most-recent)
       (get-count-and-most-recent-reading)
     (cl-who:with-html-output-to-string (*standard-output* nil :prologue t)
-      (:head
-       (:meta :charset "UTF-8")
-       (:title "Input meter readings")
-       (:link :rel "apple-touch-icon" :sizes "180x180" :href "/cl-meter-readings/apple-touch-icon.png")
-       (:link :rel "icon" :type "image/png" :sizes "32x32" :href "/cl-meter-readings/favicon-32x32.png")
-       (:link :rel "icon" :type "image/png" :sizes "16x16" :href "/cl-meter-readings/favicon-16x16.png")
-       (:link :rel "manifest" :href "/cl-meter-readings/site.webmanifest")
-       (when *data-points*
-         (cl-who:htm
-          (:script :src "/cl-meter-readings/chart.js")
-          (:script :src "/cl-meter-readings/luxon.js")
-          (:script :src "/cl-meter-readings/chartjs-adapter-luxon.js")))
-       (:style (cl-who:str +css-styling+)))
-      (:body
-       (:h1 "Reading")
-       (if (zerop readings-count)
-           (cl-who:htm (:p "No data yet"))
-           (cl-who:htm (:p (cl-who:str
-                            (flet ((time-xsor (mr)
-                                     (multiple-value-bind (ss mm hh day mon yer)
-                                         (decode-universal-time (+ (reading-timestamp mr) +unix-epoch+) -2)
-                                       (format nil "~2,'0D/~2,'0D/~D ~2,'0D:~2,'0D:~2,'0D" day mon yer hh mm ss))))
-                              (format nil
-                                      "Most recent reading of ~A reading(s): ~A"
-                                      readings-count
-                                      (mapcar (lambda (accessor) (funcall accessor most-recent))
-                                              (list #'time-xsor
-                                                    #'pv-2022-prod-kWh
-                                                    #'pv-2012-prod-kWh
-                                                    #'peak-hour-consumption-kWh
-                                                    #'off-hour-consumption-kWh
-                                                    #'peak-hour-injection-kWh
-                                                    #'off-hour-injection-kWh
-                                                    #'gas-m3
-                                                    #'water-m3))))))))
-       (:p (:a :href "/cl-meter-readings/form" "Enter new meter readings") ".")
-       (when *data-points*
-         (cl-who:htm
-          (:div (:canvas :id "myChart"))
-          (:script "const ctx = document.getElementById('myChart');
+      (:html
+       (:head
+        (:meta :charset "UTF-8")
+        (:title "Input meter readings")
+        (:link :rel "apple-touch-icon" :sizes "180x180" :href "/cl-meter-readings/apple-touch-icon.png")
+        (:link :rel "icon" :type "image/png" :sizes "32x32" :href "/cl-meter-readings/favicon-32x32.png")
+        (:link :rel "icon" :type "image/png" :sizes "16x16" :href "/cl-meter-readings/favicon-16x16.png")
+        (:link :rel "manifest" :href "/cl-meter-readings/site.webmanifest")
+        (when *data-points*
+          (cl-who:htm
+           (:script :src "/cl-meter-readings/chart.js")
+           (:script :src "/cl-meter-readings/luxon.js")
+           (:script :src "/cl-meter-readings/chartjs-adapter-luxon.js")))
+        (:style (cl-who:str +css-styling+)))
+       (:body
+        (:h1 "Reading")
+        (if (zerop readings-count)
+            (cl-who:htm (:p "No data yet"))
+            (cl-who:htm (:p (cl-who:str
+                             (flet ((time-xsor (mr)
+                                      (multiple-value-bind (ss mm hh day mon yer)
+                                          (decode-universal-time (+ (reading-timestamp mr) +unix-epoch+) -2)
+                                        (format nil "~2,'0D/~2,'0D/~D ~2,'0D:~2,'0D:~2,'0D" day mon yer hh mm ss))))
+                               (format nil
+                                       "Most recent reading of ~A reading(s): ~A"
+                                       readings-count
+                                       (mapcar (lambda (accessor) (funcall accessor most-recent))
+                                               (list #'time-xsor
+                                                     #'pv-2022-prod-kWh
+                                                     #'pv-2012-prod-kWh
+                                                     #'peak-hour-consumption-kWh
+                                                     #'off-hour-consumption-kWh
+                                                     #'peak-hour-injection-kWh
+                                                     #'off-hour-injection-kWh
+                                                     #'gas-m3
+                                                     #'water-m3))))))))
+        (:p (:a :href "/cl-meter-readings/form" "Enter new meter readings") ".")
+        (when *data-points*
+          (cl-who:htm
+           (:div (:canvas :id "myChart"))
+           (:script "const ctx = document.getElementById('myChart');
                     const config = {
                         type: 'line',
                         data: "
-                   (cl-who:str (with-output-to-string (stream)
-                                 (write-chart-config *data-points* 'pv-2022-prod-kWh)))
-                   ", options: {
+                    (cl-who:str (with-output-to-string (stream)
+                                  (write-chart-config *data-points* 'pv-2022-prod-kWh)))
+                    ", options: {
                             responsive: true,
                             interaction: {intersect: false, axis: 'x'},
                             plugins: {title: {display: true, text: 'Meter Readings'}},
                             scales: {x: {'type': 'time'}}}};
-                    new Chart(ctx, config);")))))))
+                    new Chart(ctx, config);"))))))))
 
 
 (defvar *static-assets-directory* nil
