@@ -216,6 +216,11 @@ form {
        (:link :rel "icon" :type "image/png" :sizes "32x32" :href "/cl-meter-readings/favicon-32x32.png")
        (:link :rel "icon" :type "image/png" :sizes "16x16" :href "/cl-meter-readings/favicon-16x16.png")
        (:link :rel "manifest" :href "/cl-meter-readings/site.webmanifest")
+       (when *data-points*
+         (cl-who:htm
+          (:script :src "/cl-meter-readings/chart.js")
+          (:script :src "/cl-meter-readings/luxon.js")
+          (:script :src "/cl-meter-readings/chartjs-adapter-luxon.js")))
        (:style (cl-who:str +css-styling+)))
       (:body
        (:h1 "Reading")
@@ -239,7 +244,22 @@ form {
                                                     #'off-hour-injection-kWh
                                                     #'gas-m3
                                                     #'water-m3))))))))
-       (:p (:a :href "/cl-meter-readings/form" "Enter new meter readings") ".")))))
+       (:p (:a :href "/cl-meter-readings/form" "Enter new meter readings") ".")
+       (when *data-points*
+         (cl-who:htm
+          (:div (:canvas :id "myChart"))
+          (:script "const ctx = document.getElementById('myChart');
+                    const config = {
+                        type: 'line',
+                        data: "
+                   (cl-who:str (with-output-to-string (stream)
+                                 (write-chart-config *data-points* 'pv-2022-prod-kWh)))
+                   ", options: {
+                            responsive: true,
+                            interaction: {intersect: false, axis: 'x'},
+                            plugins: {title: {display: true, text: 'Meter Readings'}},
+                            scales: {x: {'type': 'time'}}}};
+                    new Chart(ctx, config);")))))))
 
 
 (defvar *static-assets-directory* nil
