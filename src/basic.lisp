@@ -238,7 +238,7 @@ form {
             (cl-who:htm (:p (cl-who:str
                              (flet ((time-xsor (mr)
                                       (multiple-value-bind (ss mm hh day mon yer)
-                                          (decode-universal-time (+ (reading-timestamp mr) +unix-epoch+) -2)
+                                          (decode-universal-time (+ (reading-timestamp mr) +unix-epoch+))
                                         (format nil "~2,'0D/~2,'0D/~D ~2,'0D:~2,'0D:~2,'0D" day mon yer hh mm ss))))
                                (format nil
                                        "Most recent reading of ~A reading(s): ~A"
