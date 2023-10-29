@@ -23,8 +23,10 @@
                         (reading-timestamp elt)
                         x)))
 
-(defun make-chart-data-raw (data-points xsor scale)
+(defun make-chart-data-raw (data-points xsor scale &key (step 7200) (period (* 30 86400)))
   "Resample DATA-POINTS (XSOR readings) and SCALE them to a consumption rate
+
+The &key STEP and PERIOD are expressed in seconds
 
 Returns (CL:VALUES number-of-10s-since-unix-epoch
                    xsor-values
@@ -36,14 +38,11 @@ Useful scale values:
 | gas-m3           |        86400 | m3/day         |
 | water-m3         | 1000 * 86400 | l/day          |
 | pv-2012-prod-kWh |         3600 | kW             |"
-  (loop :with step = 7200               ; seconds
-        :with period = 30               ; days
-        :with start = (position-if xsor data-points)
+  (loop :with start = (position-if xsor data-points)
         :with last-idx
-        :with previous-ts
         :with previous-value
-        :with start-ts
         :with last-ts
+        :with first-ts
         :with first-value
         :with last-value
         :with end
@@ -53,38 +52,47 @@ Useful scale values:
              (setf last-idx (position-if xsor data-points :from-end t))
              (unless (and last-idx (< start last-idx))
                (error "No data to plot"))
-             (let ((previous (aref data-points start)))
-               (setf first-value (funcall xsor previous)
-                     previous-value first-value
-                     previous-ts (reading-timestamp previous)))
              (let ((last (aref data-points last-idx)))
                (setf last-value (funcall xsor last)
                      last-ts (reading-timestamp last)))
-             (setf end (1+ last-idx)
-                   start-ts (max (+ previous-ts step) (- last-ts (* period 86400))))
-             (unless (< start-ts last-ts)
+             (setf end (1+ last-idx))
+             (let ((first (aref data-points start))
+                   (first-ts-if-enough-data (- last-ts period)))
+               (setf first-ts (reading-timestamp first))
+               (if (< first-ts-if-enough-data first-ts)
+                   ;; Not enough data
+                   (setf first-value (funcall xsor first))
+                   ;; enough data
+                   (multiple-value-bind (value next-start _)
+                       (interpolate-meter-readings data-points first-ts-if-enough-data xsor :start start :end end)
+                     (declare (ignore _))
+                     (setf start next-start
+                           first-value value
+                           first-ts first-ts-if-enough-data))))
+             (unless (< first-ts last-ts)
                (error "No data to plot"))
-        :for ts = start-ts :then (min (+ ts step) last-ts)
+             (setf previous-value first-value)
+        :for previous-ts = first-ts :then ts
+        :for ts = (+ first-ts step) :then (min (+ ts step) last-ts)
         :for (abscissa . ordinate) = (multiple-value-bind (value next-start _)
                                          (interpolate-meter-readings data-points ts xsor :start start :end end)
                                        (declare (ignore _))
                                        (prog1
                                            (cons ts (/ (- value previous-value 0.0d0) (- ts previous-ts 0.0d0)))
                                          (setf start next-start
-                                               previous-value value
-                                               previous-ts ts)))
+                                               previous-value value)))
         :collect (round abscissa 10) into timestamps
         :collect (coerce (* ordinate scale) 'single-float) into values
         :while (< ts last-ts)
-        :finally (return (values timestamps values first-value last-value))))
+        :finally (return (values (cons (round first-ts 10) timestamps) (cons (car values) values) first-value last-value))))
 
 (defun write-chart-config (data-points xsor &optional (stream *standard-output*))
   (multiple-value-bind (format-string xsor-fun scale)
       (ecase xsor
-        (gas-m3 (values "Gas [m³/day] ~Fm³ → ~Fm³" #'gas-m3 86400))
-        (water-m3 (values "Water [l/day] ~Fm³ → ~Fm³" #'water-m3 86400e3))
-        (pv-2022-prod-kWh (values "PV 2022 [kW] ~FkWh → ~FkWh" #'pv-2022-prod-kWh 3600))
-        (pv-2012-prod-kWh (values "PV 2012 [kW] ~FkWh → ~FkWh" #'pv-2012-prod-kWh 3600)))
+        (gas-m3 (values "Gas [m³/day] ~,1Fm³ → ~Fm³" #'gas-m3 86400))
+        (water-m3 (values "Water [l/day] ~,1Fm³ → ~Fm³" #'water-m3 86400e3))
+        (pv-2022-prod-kWh (values "PV 2022 [kW] ~,1FkWh → ~FkWh" #'pv-2022-prod-kWh 3600))
+        (pv-2012-prod-kWh (values "PV 2012 [kW] ~,1FkWh → ~FkWh" #'pv-2012-prod-kWh 3600)))
     (multiple-value-bind (timestamps-10s values first-value last-value)
         (make-chart-data-raw data-points xsor-fun scale)
       (write-string "{labels:[" stream)
@@ -93,7 +101,7 @@ Useful scale values:
       (format stream format-string first-value last-value)
       (write-string "',data:[" stream)
       (format stream "~{~F,~}" values)
-      (write-string "],borderWidth:1,filled:false,stepped:'before',borderColor:'blue'}]}" stream)
+      (write-string "],borderWidth:1,filled:false,stepped:'after',borderColor:'blue'}]}" stream)
       (values))))
 
 (defun test-interpolate-meter-readings ()
@@ -147,3 +155,38 @@ Useful scale values:
     (assert (equal (multiple-value-list (interpolate-meter-readings data-points 1698232488 'water-m3))
                    (list 0d0 2 4)))
     (assert (handler-case (interpolate-meter-readings data-points 1698232489 #'water-m3) (simple-error () t)))))
+
+(defun test-make-chart-data-raw ()
+  (let* ((data '((0 . nil)
+                 (500 . 5d0)
+                 (3500 . 8d0)
+                 (4000 . nil)
+                 (4500 . nil)
+                 (5000 . 8d0)
+                 (6000 . nil)))
+         (data-points (make-array
+                       (length data)
+                       :initial-contents
+                       (loop :for (ts . v) in data
+                             :collect (make-instance 'meter-reading-202303
+                                                     :timestamp (+ ts 10000)
+                                                     :pv-2022-prod-kWh v)))))
+    (multiple-value-bind (timestamps values first-val last-val)
+        (make-chart-data-raw data-points
+                             #'pv-2022-prod-kWh
+                             1000
+                             :step 2000)
+      (assert (equal timestamps '(1050 1250 1450 1500)))
+      (assert (equal values '(1.0f0 1.0f0 0.5f0 0.0f0)))
+      (assert (equal first-val 5d0))
+      (assert (equal last-val 8d0)))
+    (multiple-value-bind (timestamps values first-val last-val)
+        (make-chart-data-raw data-points
+                             #'pv-2022-prod-kWh
+        1000
+                             :step 2000
+                             :period 4000)
+      (assert (equal timestamps '(1100 1300 1500)))
+      (assert (equal values '(1f0 1f0 0.25f0)))
+      (assert (equal first-val 5.5d0))
+      (assert (equal last-val 8d0)))))
