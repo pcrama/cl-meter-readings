@@ -213,7 +213,8 @@ form {
   (handle-form-request hunchentoot:*request*))
 
 
-(hunchentoot:define-easy-handler (main-page :uri "/cl-meter-readings/main") ()
+(hunchentoot:define-easy-handler (main-page :uri "/cl-meter-readings/main")
+    ((reading :init-form "pv-2022-prod-kWh"))
   (multiple-value-bind (readings-count most-recent)
       (get-count-and-most-recent-reading)
     (cl-who:with-html-output-to-string (*standard-output* nil :prologue t)
@@ -255,20 +256,32 @@ form {
                                                      #'water-m3))))))))
         (:p (:a :href "/cl-meter-readings/form" "Enter new meter readings") ".")
         (when *data-points*
-          (cl-who:htm
-           (:div (:canvas :id "myChart"))
-           (:script "const ctx = document.getElementById('myChart');
+          (let ((graphs '(("pv-2022-prod-kWh" . pv-2022-prod-kWh)
+                          ("pv-2012-prod-kWh" . pv-2012-prod-kWh)
+                          ("gas-m3" . gas-m3)
+                          ("water-m3" . water-m3))))
+            (cl-who:htm
+             (:div (:canvas :id "myChart"))
+             (:script "const ctx = document.getElementById('myChart');
                     const config = {
                         type: 'line',
                         data: "
-                    (cl-who:str (with-output-to-string (stream)
-                                  (write-chart-config *data-points* 'pv-2022-prod-kWh)))
-                    ", options: {
+                      (cl-who:str (with-output-to-string (stream)
+                                    (let ((xsor (or (cdar (member reading
+                                                                  graphs
+                                                                  :key #'car
+                                                                  :test #'equal))
+                                                    'pv-2022-prod-kWh)))
+                                      (write-chart-config *data-points* xsor))))
+                      ", options: {
                             responsive: true,
                             interaction: {intersect: false, axis: 'x'},
                             plugins: {title: {display: true, text: 'Meter Readings'}},
                             scales: {x: {'type': 'time'}}}};
-                    new Chart(ctx, config);")))
+                    new Chart(ctx, config);")
+             (:ul
+              (loop for (reading . _) in graphs do
+                (cl-who:htm (:li (:a :href (format nil "/cl-meter-readings/main?reading=~A" reading) (cl-who:str reading)))))))))
         (:hr)
         (:p "Version: " (cl-who:esc *version-comment*)))))))
 
