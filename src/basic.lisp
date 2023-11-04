@@ -102,7 +102,7 @@ form {
                     (:label :for name (cl-who:str label))
                     (:input :type "text" :id name :name name :placeholder placeholder :value value :pattern pattern))))
                 (meter-reading (name label &key value)
-                  (input-row name label "Empty field or positive number with at most one decimal" :value value :pattern "^ *(|\\d+([.,]\\d)?) *$")))
+                  (input-row name label "Empty field or positive number" :value value :pattern "^ *(|\\d+([.,]\\d+)?) *$")))
          (input-row "timestamp"
                     "Timestamp"
                     "dd/mm/yyyy HH:MM[:SS] (in your local timezone)"
