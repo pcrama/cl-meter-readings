@@ -36,6 +36,7 @@
             (descend-json (cdr (assoc head json)) tail)))))
 
 (defun get-sma-inverter-total-production ()
+  "Return produced kWh (rounded to Wh) of SMA inverter"
   (when (and (stringp *sma-inverter-host*) (stringp *sma-inverter-path*))
     (multiple-value-bind (response status-code)
          ;; TODO: SSL
@@ -44,7 +45,7 @@
          (let* ((json (json:decode-json-from-string (flexi-streams:octets-to-string response)))
                 (total-production (descend-json json (list :result :0199-XXXXX-9-+BD+ :+6400-00260100+ :|1| #'first :val))))
            (when (numberp total-production)
-             (/ (round total-production 100.0) 10.0)))))))
+             (/ (round total-production) 1000.0)))))))
 
 (defconstant +css-styling+
   "/* CSS styles for the form */
@@ -214,7 +215,7 @@ form {
 
 
 (hunchentoot:define-easy-handler (main-page :uri "/cl-meter-readings/main")
-    ((reading :init-form "pv-2022-prod-kWh"))
+    ((reading :init-form "pv-prod"))
   (multiple-value-bind (readings-count most-recent)
       (get-count-and-most-recent-reading)
     (cl-who:with-html-output-to-string (*standard-output* nil :prologue t)
@@ -256,10 +257,14 @@ form {
                                                      #'water-m3))))))))
         (:p (:a :href "/cl-meter-readings/form" "Enter new meter readings") ".")
         (when *data-points*
-          (let ((graphs '(("pv-2022-prod-kWh" . pv-2022-prod-kWh)
-                          ("pv-2012-prod-kWh" . pv-2012-prod-kWh)
-                          ("gas-m3" . gas-m3)
-                          ("water-m3" . water-m3))))
+          (let ((graphs '(("pv-prod" pv-prod "Total PV production")
+                          ("usage" usage "Electricity usage💡")
+                          ("gas-m3" gas-m3 "Gas")
+                          ("water-m3" water-m3 "Water")
+                          ("pv-2022-prod-kWh" pv-2022-prod-kWh "PV production (panels placed in 2022)")
+                          ("pv-2012-prod-kWh" pv-2012-prod-kWh "PV production (panels placed in 2012)")
+                          ("consumption" consumption "Electricity consumption💰")
+                          ("injection" injection "Electricity injection"))))
             (cl-who:htm
              (:div (:canvas :id "myChart"))
              (:script "const ctx = document.getElementById('myChart');
@@ -267,12 +272,12 @@ form {
                         type: 'line',
                         data: "
                       (cl-who:str (with-output-to-string (stream)
-                                    (let ((xsor (or (cdar (member reading
-                                                                  graphs
-                                                                  :key #'car
-                                                                  :test #'equal))
-                                                    'pv-2022-prod-kWh)))
-                                      (write-chart-config *data-points* xsor))))
+                                    (let ((xsor (or (cadar (member reading
+                                                                   graphs
+                                                                   :key #'car
+                                                                   :test #'equal))
+                                                    'pv-prod)))
+                                      (write-chart-config *data-points* xsor stream))))
                       ", options: {
                             responsive: true,
                             interaction: {intersect: false, axis: 'x'},
@@ -280,8 +285,8 @@ form {
                             scales: {x: {'type': 'time'}}}};
                     new Chart(ctx, config);")
              (:ul
-              (loop for (reading . _) in graphs do
-                (cl-who:htm (:li (:a :href (format nil "/cl-meter-readings/main?reading=~A" reading) (cl-who:str reading)))))))))
+              (loop for (reading _ label) in graphs do
+                (cl-who:htm (:li (:a :href (format nil "/cl-meter-readings/main?reading=~A" reading) (cl-who:esc label)))))))))
         (:hr)
         (:p "Version: " (cl-who:esc *version-comment*)))))))
 

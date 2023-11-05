@@ -86,13 +86,77 @@ Useful scale values:
         :while (< ts last-ts)
         :finally (return (values (cons (round first-ts 10) timestamps) (cons (car values) values) first-value last-value))))
 
+
+(defun make-multi-accessor (data-points fun &rest inputs)
+  (let ((accessors (mapcar (lambda (xsor)
+                             (let (start end)
+                               (lambda (meter-reading)
+                                 (or (funcall xsor meter-reading)
+                                     (let ((timestamp (reading-timestamp meter-reading)))
+                                       (multiple-value-bind (result new-start new-end)
+                                           (interpolate-meter-readings data-points timestamp xsor
+                                                                       :start (or start 0) :end end)
+                                         (setq start new-start end new-end)
+                                         result))))))
+                           inputs)))
+    (lambda (meter-reading)
+      (ignore-errors
+       (apply fun (mapcar (lambda (xsor) (funcall xsor meter-reading)) accessors))))))
+
+
+(defun test-multi-accessor ()
+  (let* ((data-points (make-array
+                       6
+                       :initial-contents
+                       (list (make-instance 'meter-reading-202303 :timestamp 0 :pv-2012-prod-kWh 1d0 :pv-2022-prod-kWh 2d0)
+                             (make-instance 'meter-reading-202303 :timestamp 1000 :pv-2012-prod-kWh 3d0 :pv-2022-prod-kWh 4d0)
+                             (make-instance 'meter-reading-202303 :timestamp 2000 :pv-2012-prod-kWh nil :pv-2022-prod-kWh 5d0)
+                             (make-instance 'meter-reading-202303 :timestamp 3000 :pv-2012-prod-kWh 7d0 :pv-2022-prod-kWh nil)
+                             (make-instance 'meter-reading-202303 :timestamp 4000 :pv-2012-prod-kWh 8d0 :pv-2022-prod-kWh 9d0)
+                             (make-instance 'meter-reading-202303 :timestamp 5000 :pv-2012-prod-kWh 10d0 :pv-2022-prod-kWh nil))))
+         (fun (make-multi-accessor data-points #'+ #'pv-2012-prod-kWh #'pv-2022-prod-kWh)))
+    (assert (equal (funcall fun (make-instance 'meter-reading-202303 :timestamp 0)) 3d0))
+    (assert (equal (funcall fun (make-instance 'meter-reading-202303 :timestamp 500)) 5d0))
+    (assert (equal (funcall fun (make-instance 'meter-reading-202303 :timestamp 1000)) 7d0))
+    (assert (equal (funcall fun (make-instance 'meter-reading-202303 :timestamp 1500)) 8.5d0))
+    (assert (equal (funcall fun (make-instance 'meter-reading-202303 :timestamp 2000)) 10d0))
+    (assert (equal (funcall fun (make-instance 'meter-reading-202303 :timestamp 2250)) 11d0))
+    (assert (equal (funcall fun (make-instance 'meter-reading-202303 :timestamp 3000)) 14d0))
+    (assert (equal (funcall fun (make-instance 'meter-reading-202303 :timestamp 4000)) 17d0))
+    (assert (equal (funcall fun (make-instance 'meter-reading-202303 :timestamp 5000)) nil))))
+
+
 (defun write-chart-config (data-points xsor &optional (stream *standard-output*))
   (multiple-value-bind (format-string xsor-fun scale)
       (ecase xsor
         (gas-m3 (values "Gas [m³/day] ~,1Fm³ → ~Fm³" #'gas-m3 86400))
         (water-m3 (values "Water [l/day] ~,1Fm³ → ~Fm³" #'water-m3 86400e3))
         (pv-2022-prod-kWh (values "PV 2022 [kW] ~,1FkWh → ~FkWh" #'pv-2022-prod-kWh 3600))
-        (pv-2012-prod-kWh (values "PV 2012 [kW] ~,1FkWh → ~FkWh" #'pv-2012-prod-kWh 3600)))
+        (pv-2012-prod-kWh (values "PV 2012 [kW] ~,1FkWh → ~FkWh" #'pv-2012-prod-kWh 3600))
+        (pv-prod (values "PV [kW] ~,1FkWh → ~,1FkWh"
+                         (make-multi-accessor data-points #'+ #'pv-2022-prod-kWh #'pv-2012-prod-kWh)
+                         3600))
+        (usage (values "Usage💡 [kW] ~,1FkWh → ~,1FkWh"
+                       (make-multi-accessor data-points
+                                            (lambda (pv-2022 pv-2012 peak-conso off-conso peak-inj off-inj)
+                                              (- (+ pv-2022 pv-2012 peak-conso off-conso)
+                                                 (+ peak-inj off-inj)))
+                                            #'pv-2022-prod-kWh #'pv-2012-prod-kWh
+                                            #'peak-hour-consumption-kWh #'off-hour-consumption-kWh
+                                            #'peak-hour-injection-kWh #'off-hour-injection-kWh)
+                       3600))
+        (consumption (values "Consumption💰 [kW] ~,1FkWh → ~,1FkWh"
+                             (make-multi-accessor data-points #'+ #'peak-hour-consumption-kWh #'off-hour-consumption-kWh)
+                             3600))
+        (injection (values "Injection [kW] ~,1FkWh → ~,1FkWh"
+                           (make-multi-accessor data-points #'+ #'peak-hour-injection-kWh #'off-hour-injection-kWh)
+                           3600))
+        (peak-hour-injection-kWh (values "Peak Hour Injection [kW] ~,1FkWh → ~FkWh"
+                                         #'peak-hour-injection-kWh
+                                         3600))
+        (off-hour-injection-kWh (values "Off Hour Injection [kW] ~,1FkWh → ~FkWh"
+                                        #'off-hour-injection-kWh
+                                        3600)))
     (multiple-value-bind (timestamps-10s values first-value last-value)
         (make-chart-data-raw data-points xsor-fun scale)
       (write-string "{labels:[" stream)
@@ -157,20 +221,21 @@ Useful scale values:
     (assert (handler-case (interpolate-meter-readings data-points 1698232489 #'water-m3) (simple-error () t)))))
 
 (defun test-make-chart-data-raw ()
-  (let* ((data '((0 . nil)
-                 (500 . 5d0)
-                 (3500 . 8d0)
-                 (4000 . nil)
-                 (4500 . nil)
-                 (5000 . 8d0)
-                 (6000 . nil)))
+  (let* ((data '((0    nil nil)
+                 (500  nil 5d0)
+                 (3500 1d0 8d0)
+                 (4000 nil nil)
+                 (4500 2d0 nil)
+                 (5000 nil 8d0)
+                 (6000 nil nil)))
          (data-points (make-array
                        (length data)
                        :initial-contents
-                       (loop :for (ts . v) in data
+                       (loop :for (ts v w) in data
                              :collect (make-instance 'meter-reading-202303
                                                      :timestamp (+ ts 10000)
-                                                     :pv-2022-prod-kWh v)))))
+                                                     :pv-2012-prod-kWh v
+                                                     :pv-2022-prod-kWh w)))))
     (multiple-value-bind (timestamps values first-val last-val)
         (make-chart-data-raw data-points
                              #'pv-2022-prod-kWh
@@ -183,10 +248,20 @@ Useful scale values:
     (multiple-value-bind (timestamps values first-val last-val)
         (make-chart-data-raw data-points
                              #'pv-2022-prod-kWh
-        1000
+                             1000
                              :step 2000
                              :period 4000)
       (assert (equal timestamps '(1100 1300 1500)))
       (assert (equal values '(1f0 1f0 0.25f0)))
       (assert (equal first-val 5.5d0))
-      (assert (equal last-val 8d0)))))
+      (assert (equal last-val 8d0)))
+    (multiple-value-bind (timestamps values first-val last-val)
+        (make-chart-data-raw data-points
+                             (make-multi-accessor data-points #'+ #'pv-2022-prod-kWh #'pv-2012-prod-kWh)
+                             1000
+                             :step 2000
+                             :period 4000)
+      (assert (equal timestamps '(1100 1300 1500)))
+      (assert (equal values '(1f0)))
+      (assert (equal first-val 9d0))
+      (assert (equal last-val 10d0)))))
