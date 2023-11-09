@@ -100,10 +100,22 @@ form {
                   (cl-who:htm
                    (:div
                     :class "input-row"
-                    (:label :for name (cl-who:str label))
+                    (:label :for name (cl-who:esc label))
                     (:input :type "text" :id name :name name :placeholder placeholder :value value :pattern pattern))))
-                (meter-reading (name label &key value)
-                  (input-row name label "Empty field or positive number" :value value :pattern "^ *(|\\d+([.,]\\d+)?) *$")))
+                (meter-reading (name label accessor &key value)
+                  (let* ((base-help-text "Empty field or positive number")
+                         (last-known-value (and *data-points* (funcall accessor (find-if accessor *data-points* :from-end t))))
+                         (help-text
+                           (if last-known-value
+                               (format nil
+                                       "~A (~A)"
+                                       (if (typep last-known-value 'double-float)
+                                           (let ((formatted (format nil "~A" last-known-value)))
+                                             (subseq formatted 0 (- (length formatted) 2)))
+                                           last-known-value)
+                                       base-help-text)
+                               base-help-text)))
+                    (input-row name label help-text :value value :pattern "^ *(|\\d+([.,]\\d+)?) *$"))))
          (input-row "timestamp"
                     "Timestamp"
                     "dd/mm/yyyy HH:MM[:SS] (in your local timezone)"
@@ -114,14 +126,15 @@ form {
                     :pattern " *(3[01]|[0-2]?[0-9])/(1[0-2]|0?[0-9])/2[01][0-9][0-9] (2[0-3]|[01]?[0-9]):[0-5][0-9](:[0-5][0-9])? *")
          (meter-reading "pv_2022_prod_kWh"
                         "PV 2022 production [kWh]"
+                        #'pv-2022-prod-kWh
                         :value (ignore-errors (get-sma-inverter-total-production)))
-         (meter-reading "pv_2012_prod_kWh" "PV 2012 production [kWh]")
-         (meter-reading "peak_hour_consumption_kWh" "1.8.1 Peak hour consumption [kWh]")
-         (meter-reading "off_hour_consumption_kWh" "1.8.2 Off hour consumption [kWh]")
-         (meter-reading "peak_hour_injection_kWh" "2.8.1 Peak hour injection [kWh]")
-         (meter-reading "off_hour_injection_kWh" "2.8.2 Off hour injection [kWh]")
-         (meter-reading "gas_m3" "Gas [m³]")
-         (meter-reading "water_m3" "Water [m³]"))
+         (meter-reading "pv_2012_prod_kWh" "PV 2012 production [kWh]" #'pv-2012-prod-kWh)
+         (meter-reading "peak_hour_consumption_kWh" "1.8.1 Peak hour consumption [kWh]" #'peak-hour-consumption-kWh)
+         (meter-reading "off_hour_consumption_kWh" "1.8.2 Off hour consumption [kWh]" #'off-hour-consumption-kWh)
+         (meter-reading "peak_hour_injection_kWh" "2.8.1 Peak hour injection [kWh]" #'peak-hour-injection-kWh)
+         (meter-reading "off_hour_injection_kWh" "2.8.2 Off hour injection [kWh]" #'off-hour-injection-kWh)
+         (meter-reading "gas_m3" "Gas [m³]" #'gas-m3)
+         (meter-reading "water_m3" "Water [m³]" #'water-m3))
        (:div
         :class "input-row"
         (:input :type "submit" :value "submit" :value "Confirm readings")))
@@ -264,7 +277,9 @@ form {
                           ("pv-2022-prod-kWh" pv-2022-prod-kWh "PV production (panels placed in 2022)")
                           ("pv-2012-prod-kWh" pv-2012-prod-kWh "PV production (panels placed in 2012)")
                           ("consumption" consumption "Electricity consumption💰")
-                          ("injection" injection "Electricity injection"))))
+                          ("injection" injection "Electricity injection")
+                          ("peak-injection" peak-hour-injection-kWh "Electricity injection during peak hours")
+                          ("off-injection" off-hour-injection-kWh "Electricity injection outside of peak hours"))))
             (cl-who:htm
              (:div (:canvas :id "myChart"))
              (:script "const ctx = document.getElementById('myChart');
