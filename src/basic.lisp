@@ -70,6 +70,13 @@ form {
     .input-row {
         grid-template-columns: 1fr;
     }
+    .input-row label {
+        font-size: 6mm;
+        text-align: left;
+    }
+    .input-row input {
+        font-size: 6mm;
+    }
 }
 
 .input-row:last-child {
@@ -87,6 +94,7 @@ form {
     (:html
      (:head
       (:meta :charset "UTF-8")
+      (:meta :name "viewport" :content "width=device-width,initial-scale=1")
       (:title "Input meter readings")
       (:link :rel "apple-touch-icon" :sizes "180x180" :href "/cl-meter-readings/apple-touch-icon.png")
       (:link :rel "icon" :type "image/png" :sizes "32x32" :href "/cl-meter-readings/favicon-32x32.png")
@@ -235,6 +243,7 @@ form {
     (:html
      (:head
       (:meta :charset "UTF-8")
+      (:meta :name "viewport" :content "width=device-width,initial-scale=1")
       (:title "Input meter readings")
       (:link :rel "apple-touch-icon" :sizes "180x180" :href "/cl-meter-readings/apple-touch-icon.png")
       (:link :rel "icon" :type "image/png" :sizes "32x32" :href "/cl-meter-readings/favicon-32x32.png")
