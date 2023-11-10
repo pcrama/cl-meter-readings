@@ -58,7 +58,7 @@ I restarted sbcl, then installed hunchentoot and cl-who.
       #+end_example
    3. Set =CL_METER_READINGS_SQL_PROGRAM= like this:
       #+begin_src shell :exports code
-        export CL_METER_READINGS_SQL_PROGRAM="ssh -o RequestTty=no -o IdentityAgent=None -F none -i /home/pi/.ssh/id_rsa_sqlite3 user@host"
+        export CL_METER_READINGS_SQL_PROGRAM="timeout 5 ssh -o RequestTty=no -o IdentityAgent=None -F none -i /home/pi/.ssh/id_rsa_sqlite3 user@host"
       #+end_src
 
 ** Deployment

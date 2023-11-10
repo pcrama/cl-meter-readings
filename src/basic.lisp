@@ -21,6 +21,17 @@
 (eval-when (:compile-toplevel :execute :load-toplevel)
   (setf (cl-who:html-mode) :html5))
 
+
+(defmacro with-timed-logged-ignored-error ((info &body handler) &body body)
+  (let ((start (gensym "start"))
+        (err (gensym "error")))
+    `(let ((,start (get-universal-time)))
+       (handler-case (progn ,@body)
+         (error (,err)
+           (format *error-output* "~&~A: ~A after ~Ds~%" ,info ,err (- (get-universal-time) ,start))
+           ,@handler)))))
+
+
 (defvar *sma-inverter-host* nil
   "Initialized from CL_METER_READINGS_SMA_INVERTER_HOST")
 
@@ -135,7 +146,8 @@ form {
          (meter-reading "pv_2022_prod_kWh"
                         "PV 2022 production [kWh]"
                         #'pv-2022-prod-kWh
-                        :value (ignore-errors (get-sma-inverter-total-production)))
+                        :value (with-timed-logged-ignored-error ("Getting SMA production data failed")
+                                 (get-sma-inverter-total-production)))
          (meter-reading "pv_2012_prod_kWh" "PV 2012 production [kWh]" #'pv-2012-prod-kWh)
          (meter-reading "peak_hour_consumption_kWh" "1.8.1 Peak hour consumption [kWh]" #'peak-hour-consumption-kWh)
          (meter-reading "off_hour_consumption_kWh" "1.8.2 Off hour consumption [kWh]" #'off-hour-consumption-kWh)
@@ -237,8 +249,8 @@ form {
 
 (hunchentoot:define-easy-handler (main-page :uri "/cl-meter-readings/main")
     ((reading :init-form "pv-prod"))
-  (unless *data-points*
-    (ignore-errors (load-database-cache)))
+  (with-timed-logged-ignored-error ("Loading database cache failed")
+    (unless *data-points* (load-database-cache)))
   (cl-who:with-html-output-to-string (*standard-output* nil :prologue t)
     (:html
      (:head
@@ -257,30 +269,30 @@ form {
       (:style (cl-who:str +css-styling+)))
      (:body
       (:h1 "Reading")
-      (handler-case
-          (multiple-value-bind (readings-count most-recent)
-              (get-count-and-most-recent-reading)
-            (if (zerop readings-count)
-                (cl-who:htm (:p "No data yet"))
-                (cl-who:htm (:p (cl-who:str
-                                 (flet ((time-xsor (mr)
-                                          (multiple-value-bind (ss mm hh day mon yer)
-                                              (decode-universal-time (+ (reading-timestamp mr) +unix-epoch+))
-                                            (format nil "~2,'0D/~2,'0D/~D ~2,'0D:~2,'0D:~2,'0D" day mon yer hh mm ss))))
-                                   (format nil
-                                           "Most recent reading of ~A reading(s): ~A"
-                                           readings-count
-                                           (mapcar (lambda (accessor) (funcall accessor most-recent))
-                                                   (list #'time-xsor
-                                                         #'pv-2022-prod-kWh
-                                                         #'pv-2012-prod-kWh
-                                                         #'peak-hour-consumption-kWh
-                                                         #'off-hour-consumption-kWh
-                                                         #'peak-hour-injection-kWh
-                                                         #'off-hour-injection-kWh
-                                                         #'gas-m3
-                                                         #'water-m3)))))))))
-        (error () (cl-who:htm "Unable to fetch data")))
+      (with-timed-logged-ignored-error ("Getting summary info from DB failed"
+                                         (cl-who:htm "Unable to fetch data"))
+        (multiple-value-bind (readings-count most-recent)
+            (get-count-and-most-recent-reading)
+          (if (zerop readings-count)
+              (cl-who:htm (:p "No data yet"))
+              (cl-who:htm (:p (cl-who:str
+                               (flet ((time-xsor (mr)
+                                        (multiple-value-bind (ss mm hh day mon yer)
+                                            (decode-universal-time (+ (reading-timestamp mr) +unix-epoch+))
+                                          (format nil "~2,'0D/~2,'0D/~D ~2,'0D:~2,'0D:~2,'0D" day mon yer hh mm ss))))
+                                 (format nil
+                                         "Most recent reading of ~A reading(s): ~A"
+                                         readings-count
+                                         (mapcar (lambda (accessor) (funcall accessor most-recent))
+                                                 (list #'time-xsor
+                                                       #'pv-2022-prod-kWh
+                                                       #'pv-2012-prod-kWh
+                                                       #'peak-hour-consumption-kWh
+                                                       #'off-hour-consumption-kWh
+                                                       #'peak-hour-injection-kWh
+                                                       #'off-hour-injection-kWh
+                                                       #'gas-m3
+                                                       #'water-m3))))))))))
       (:p (:a :href "/cl-meter-readings/form" "Enter new meter readings") ".")
       (when *data-points*
         (let ((graphs '(("pv-prod" pv-prod "Total PV production")
@@ -341,7 +353,7 @@ form {
         *sma-inverter-host* (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_HOST")
         *sma-inverter-path* (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_PATH")
         *sql-program* (or (uiop:getenv "CL_METER_READINGS_SQL_PROGRAM") "sqlite3 db.db"))
-  (ignore-errors (load-database-cache))
+  (with-timed-logged-ignored-error ("Loading cache of DB at startup") (load-database-cache))
   (format t
           "~&*sma-inverter-host*=~S~
            ~&*sma-inverter-path*=~S~
