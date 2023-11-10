@@ -209,6 +209,14 @@
     (mapcar #'parse-sql-line-to-meter-reading-202303 data-lines)))
 
 
+(defun load-database-cache ()
+  (let ((data-202208 (get-meter-reading-202208))
+        (data-202303 (get-meter-reading-202303)))
+    (setf *data-points* (make-array (+ (length data-202208) (length data-202303))
+                                    :fill-pointer t
+                                    :initial-contents (append data-202208 data-202303)))))
+
+
 (defgeneric electricity-usage-kWh (from to))
 
 (defmethod electricity-usage-kWh ((from meter-reading-202208) (to meter-reading-202208))

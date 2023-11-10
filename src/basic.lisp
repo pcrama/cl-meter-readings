@@ -229,81 +229,85 @@ form {
 
 (hunchentoot:define-easy-handler (main-page :uri "/cl-meter-readings/main")
     ((reading :init-form "pv-prod"))
-  (multiple-value-bind (readings-count most-recent)
-      (get-count-and-most-recent-reading)
-    (cl-who:with-html-output-to-string (*standard-output* nil :prologue t)
-      (:html
-       (:head
-        (:meta :charset "UTF-8")
-        (:title "Input meter readings")
-        (:link :rel "apple-touch-icon" :sizes "180x180" :href "/cl-meter-readings/apple-touch-icon.png")
-        (:link :rel "icon" :type "image/png" :sizes "32x32" :href "/cl-meter-readings/favicon-32x32.png")
-        (:link :rel "icon" :type "image/png" :sizes "16x16" :href "/cl-meter-readings/favicon-16x16.png")
-        (:link :rel "manifest" :href "/cl-meter-readings/site.webmanifest")
-        (when *data-points*
+  (unless *data-points*
+    (ignore-errors (load-database-cache)))
+  (cl-who:with-html-output-to-string (*standard-output* nil :prologue t)
+    (:html
+     (:head
+      (:meta :charset "UTF-8")
+      (:title "Input meter readings")
+      (:link :rel "apple-touch-icon" :sizes "180x180" :href "/cl-meter-readings/apple-touch-icon.png")
+      (:link :rel "icon" :type "image/png" :sizes "32x32" :href "/cl-meter-readings/favicon-32x32.png")
+      (:link :rel "icon" :type "image/png" :sizes "16x16" :href "/cl-meter-readings/favicon-16x16.png")
+      (:link :rel "manifest" :href "/cl-meter-readings/site.webmanifest")
+      (when *data-points*
+        (cl-who:htm
+         (:script :src "/cl-meter-readings/chart.js")
+         (:script :src "/cl-meter-readings/luxon.js")
+         (:script :src "/cl-meter-readings/chartjs-adapter-luxon.js")))
+      (:style (cl-who:str +css-styling+)))
+     (:body
+      (:h1 "Reading")
+      (handler-case
+          (multiple-value-bind (readings-count most-recent)
+              (get-count-and-most-recent-reading)
+            (if (zerop readings-count)
+                (cl-who:htm (:p "No data yet"))
+                (cl-who:htm (:p (cl-who:str
+                                 (flet ((time-xsor (mr)
+                                          (multiple-value-bind (ss mm hh day mon yer)
+                                              (decode-universal-time (+ (reading-timestamp mr) +unix-epoch+))
+                                            (format nil "~2,'0D/~2,'0D/~D ~2,'0D:~2,'0D:~2,'0D" day mon yer hh mm ss))))
+                                   (format nil
+                                           "Most recent reading of ~A reading(s): ~A"
+                                           readings-count
+                                           (mapcar (lambda (accessor) (funcall accessor most-recent))
+                                                   (list #'time-xsor
+                                                         #'pv-2022-prod-kWh
+                                                         #'pv-2012-prod-kWh
+                                                         #'peak-hour-consumption-kWh
+                                                         #'off-hour-consumption-kWh
+                                                         #'peak-hour-injection-kWh
+                                                         #'off-hour-injection-kWh
+                                                         #'gas-m3
+                                                         #'water-m3)))))))))
+        (error () (cl-who:htm "Unable to fetch data")))
+      (:p (:a :href "/cl-meter-readings/form" "Enter new meter readings") ".")
+      (when *data-points*
+        (let ((graphs '(("pv-prod" pv-prod "Total PV production")
+                        ("usage" usage "Electricity usage💡")
+                        ("gas-m3" gas-m3 "Gas")
+                        ("water-m3" water-m3 "Water")
+                        ("pv-2022-prod-kWh" pv-2022-prod-kWh "PV production (panels placed in 2022)")
+                        ("pv-2012-prod-kWh" pv-2012-prod-kWh "PV production (panels placed in 2012)")
+                        ("consumption" consumption "Electricity consumption💰")
+                        ("injection" injection "Electricity injection")
+                        ("peak-injection" peak-hour-injection-kWh "Electricity injection during peak hours")
+                        ("off-injection" off-hour-injection-kWh "Electricity injection outside of peak hours"))))
           (cl-who:htm
-           (:script :src "/cl-meter-readings/chart.js")
-           (:script :src "/cl-meter-readings/luxon.js")
-           (:script :src "/cl-meter-readings/chartjs-adapter-luxon.js")))
-        (:style (cl-who:str +css-styling+)))
-       (:body
-        (:h1 "Reading")
-        (if (zerop readings-count)
-            (cl-who:htm (:p "No data yet"))
-            (cl-who:htm (:p (cl-who:str
-                             (flet ((time-xsor (mr)
-                                      (multiple-value-bind (ss mm hh day mon yer)
-                                          (decode-universal-time (+ (reading-timestamp mr) +unix-epoch+))
-                                        (format nil "~2,'0D/~2,'0D/~D ~2,'0D:~2,'0D:~2,'0D" day mon yer hh mm ss))))
-                               (format nil
-                                       "Most recent reading of ~A reading(s): ~A"
-                                       readings-count
-                                       (mapcar (lambda (accessor) (funcall accessor most-recent))
-                                               (list #'time-xsor
-                                                     #'pv-2022-prod-kWh
-                                                     #'pv-2012-prod-kWh
-                                                     #'peak-hour-consumption-kWh
-                                                     #'off-hour-consumption-kWh
-                                                     #'peak-hour-injection-kWh
-                                                     #'off-hour-injection-kWh
-                                                     #'gas-m3
-                                                     #'water-m3))))))))
-        (:p (:a :href "/cl-meter-readings/form" "Enter new meter readings") ".")
-        (when *data-points*
-          (let ((graphs '(("pv-prod" pv-prod "Total PV production")
-                          ("usage" usage "Electricity usage💡")
-                          ("gas-m3" gas-m3 "Gas")
-                          ("water-m3" water-m3 "Water")
-                          ("pv-2022-prod-kWh" pv-2022-prod-kWh "PV production (panels placed in 2022)")
-                          ("pv-2012-prod-kWh" pv-2012-prod-kWh "PV production (panels placed in 2012)")
-                          ("consumption" consumption "Electricity consumption💰")
-                          ("injection" injection "Electricity injection")
-                          ("peak-injection" peak-hour-injection-kWh "Electricity injection during peak hours")
-                          ("off-injection" off-hour-injection-kWh "Electricity injection outside of peak hours"))))
-            (cl-who:htm
-             (:div (:canvas :id "myChart"))
-             (:script "const ctx = document.getElementById('myChart');
-                    const config = {
+           (:div (:canvas :id "myChart"))
+           (:script "const ctx = document.getElementById('myChart');
+                     const config = {
                         type: 'line',
                         data: "
-                      (cl-who:str (with-output-to-string (stream)
-                                    (let ((xsor (or (cadar (member reading
-                                                                   graphs
-                                                                   :key #'car
-                                                                   :test #'equal))
-                                                    'pv-prod)))
-                                      (write-chart-config *data-points* xsor stream))))
-                      ", options: {
+                    (cl-who:str (with-output-to-string (stream)
+                                  (let ((xsor (or (cadar (member reading
+                                                                 graphs
+                                                                 :key #'car
+                                                                 :test #'equal))
+                                                  'pv-prod)))
+                                    (write-chart-config *data-points* xsor stream))))
+                    ", options: {
                             responsive: true,
                             interaction: {intersect: false, axis: 'x'},
                             plugins: {title: {display: true, text: 'Meter Readings'}},
                             scales: {x: {'type': 'time'}}}};
                     new Chart(ctx, config);")
-             (:ul
-              (loop for (reading _ label) in graphs do
-                (cl-who:htm (:li (:a :href (format nil "/cl-meter-readings/main?reading=~A" reading) (cl-who:esc label)))))))))
-        (:hr)
-        (:p "Version: " (cl-who:esc *version-comment*)))))))
+           (:ul
+            (loop for (reading _ label) in graphs do
+              (cl-who:htm (:li (:a :href (format nil "/cl-meter-readings/main?reading=~A" reading) (cl-who:esc label)))))))))
+      (:hr)
+      (:p "Version: " (cl-who:esc *version-comment*))))))
 
 
 (defvar *static-assets-directory* nil
@@ -311,6 +315,7 @@ form {
 
 (defvar *acceptor* nil
   "Hunchentoot acceptor instance, started by `main'.")
+
 
 (defun main ()
   (setf *static-assets-directory*
@@ -327,11 +332,7 @@ form {
         *sma-inverter-host* (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_HOST")
         *sma-inverter-path* (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_PATH")
         *sql-program* (or (uiop:getenv "CL_METER_READINGS_SQL_PROGRAM") "sqlite3 db.db"))
-  (let ((data-202208 (get-meter-reading-202208))
-        (data-202303 (get-meter-reading-202303)))
-    (setf *data-points* (make-array (+ (length data-202208) (length data-202303))
-                                    :fill-pointer t
-                                    :initial-contents (append data-202208 data-202303))))
+  (ignore-errors (load-database-cache))
   (format t
           "~&*sma-inverter-host*=~S~
            ~&*sma-inverter-path*=~S~
