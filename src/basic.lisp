@@ -76,6 +76,11 @@ form {
     text-align: right;
 }
 
+.input-row label.with-auto-fill-enabled:hover {
+    cursor: copy;
+    color: blue;
+}
+
 /* CSS styles for responsive design */
 @media screen and (max-width: 600px) {
     .input-row {
@@ -115,26 +120,40 @@ form {
      (:body
       (:form
        :action "/cl-meter-readings/submit" :method "POST"
-       (labels ((input-row (name label placeholder &key value pattern)
+       (labels ((input-row (name label placeholder &key value pattern auto-fill)
                   (cl-who:htm
                    (:div
                     :class "input-row"
-                    (:label :for name (cl-who:esc label))
+                    (if auto-fill
+                        (cl-who:htm
+                         (:label :for name
+                                 :class "with-auto-fill-enabled"
+                                 :onclick (format nil
+                                                  "{ let elt = document.getElementById(~S); elt.value = elt.value.trim() || ~S; }"
+                                                  name
+                                                  auto-fill)
+                                 (cl-who:esc label)
+                                 " →⬜"))
+                        (cl-who:htm (:label :for name (cl-who:esc label))))
                     (:input :type "text" :id name :name name :placeholder placeholder :value value :pattern pattern))))
                 (meter-reading (name label accessor &key value)
                   (let* ((base-help-text "Empty field or positive number")
                          (last-known-value (and *data-points* (funcall accessor (find-if accessor *data-points* :from-end t))))
+                         (last-known-formatted (if (typep last-known-value 'double-float)
+                                                   (let ((formatted (format nil "~A" last-known-value)))
+                                                     (subseq formatted 0 (- (length formatted) 2)))
+                                                   last-known-value))
                          (help-text
                            (if last-known-value
                                (format nil
                                        "~A (~A)"
-                                       (if (typep last-known-value 'double-float)
-                                           (let ((formatted (format nil "~A" last-known-value)))
-                                             (subseq formatted 0 (- (length formatted) 2)))
-                                           last-known-value)
+                                       last-known-formatted
                                        base-help-text)
                                base-help-text)))
-                    (input-row name label help-text :value value :pattern "^ *(|\\d+([.,]\\d+)?) *$"))))
+                    (input-row name label help-text
+                               :value value
+                               :pattern "^ *(|\\d+([.,]\\d+)?) *$"
+                               :auto-fill last-known-formatted))))
          (input-row "timestamp"
                     "Timestamp"
                     "dd/mm/yyyy HH:MM[:SS] (in your local timezone)"
