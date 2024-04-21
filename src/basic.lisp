@@ -321,9 +321,7 @@ form {
                         ("pv-2022-prod-kWh" pv-2022-prod-kWh "PV production (panels placed in 2022)")
                         ("pv-2012-prod-kWh" pv-2012-prod-kWh "PV production (panels placed in 2012)")
                         ("consumption" consumption "Electricity consumption💰")
-                        ("injection" injection "Electricity injection")
-                        ("peak-injection" peak-hour-injection-kWh "Electricity injection during peak hours")
-                        ("off-injection" off-hour-injection-kWh "Electricity injection outside of peak hours"))))
+                        ("injection" injection "Electricity injection"))))
           (cl-who:htm
            (:div (:canvas :id "myChart"))
            (:script "const ctx = document.getElementById('myChart');
