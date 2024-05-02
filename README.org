@@ -49,6 +49,7 @@ I restarted sbcl, then installed hunchentoot and cl-who.
    | CL_METER_READINGS_SMA_INVERTER_HOST | =SMA3xxxxxxxx5=           |
    | CL_METER_READINGS_SMA_INVERTER_PATH | =dyn/getDashValues.json=  |
    | CL_METER_READINGS_SQL_PROGRAM       | =sqlite3 db.db=           |
+   | CL_METER_READINGS_SMART_METER       | =/dev/ttyUSB0=            |
 
    If your database resides on a different host accessible through SSH:
    1. Create a new key pair without a password
@@ -70,7 +71,7 @@ I restarted sbcl, then installed hunchentoot and cl-who.
                         mkdir -p "$dest_dir";
                         tar xvf - -C "$dest_dir";
                         cd "$dest_dir";
-                        sbcl --load basic.lisp --eval "(sb-ext:save-lisp-and-die \"$dest_dir/app.core\" :toplevel (function cl-meter-readings::main-with-sleep) :compression t)"'
+                        sbcl --load basic.lisp --eval "(sb-ext:save-lisp-and-die \"$dest_dir/app.core\" :toplevel (function cl-meter-readings::main) :compression t)"'
 #+end_src
 
 * Data model

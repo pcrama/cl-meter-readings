@@ -9,8 +9,7 @@
 
 (in-package :cl-meter-readings)
 
-(load "data")
-(load "interpol.lisp")
+(defconstant +unix-epoch+ (encode-universal-time 0 0 0 1 1 1970 0))
 
 (defvar *version-comment*
   (or (ignore-errors
@@ -20,6 +19,10 @@
 
 (eval-when (:compile-toplevel :execute :load-toplevel)
   (setf (cl-who:html-mode) :html5))
+
+(load "data")
+(load "interpol")
+(load "smart-meter")
 
 
 (defmacro with-timed-logged-ignored-error ((info &body handler) &body body)
@@ -31,6 +34,8 @@
            (format *error-output* "~&~A: ~A after ~Ds~%" ,info ,err (- (get-universal-time) ,start))
            ,@handler)))))
 
+(defvar *smart-meter* nil
+  "Initialized from CL_METER_READINGS_SMART_METER")
 
 (defvar *sma-inverter-host* nil
   "Initialized from CL_METER_READINGS_SMA_INVERTER_HOST")
@@ -168,10 +173,15 @@ form {
                         :value (with-timed-logged-ignored-error ("Getting SMA production data failed")
                                  (get-sma-inverter-total-production)))
          (meter-reading "pv_2012_prod_kWh" "PV 2012 production [kWh]" #'pv-2012-prod-kWh)
-         (meter-reading "peak_hour_consumption_kWh" "1.8.1 Peak hour consumption [kWh]" #'peak-hour-consumption-kWh)
-         (meter-reading "off_hour_consumption_kWh" "1.8.2 Off hour consumption [kWh]" #'off-hour-consumption-kWh)
-         (meter-reading "peak_hour_injection_kWh" "2.8.1 Peak hour injection [kWh]" #'peak-hour-injection-kWh)
-         (meter-reading "off_hour_injection_kWh" "2.8.2 Off hour injection [kWh]" #'off-hour-injection-kWh)
+         (let ((smart-meter-reading (ignore-errors (consume-smart-meter-output *smart-meter*))))
+           (meter-reading "peak_hour_consumption_kWh" "1.8.1 Peak hour consumption [kWh]" #'peak-hour-consumption-kWh
+                          :value (ignore-errors (peak-hour-consumption-kWh smart-meter-reading)))
+           (meter-reading "off_hour_consumption_kWh" "1.8.2 Off hour consumption [kWh]" #'off-hour-consumption-kWh
+                          :value (ignore-errors (off-hour-consumption-kWh smart-meter-reading)))
+           (meter-reading "peak_hour_injection_kWh" "2.8.1 Peak hour injection [kWh]" #'peak-hour-injection-kWh
+                          :value (ignore-errors (peak-hour-injection-kWh smart-meter-reading)))
+           (meter-reading "off_hour_injection_kWh" "2.8.2 Off hour injection [kWh]" #'off-hour-injection-kWh
+                          :value (ignore-errors (off-hour-injection-kWh smart-meter-reading))))
          (meter-reading "gas_m3" "Gas [m³]" #'gas-m3)
          (meter-reading "water_m3" "Water [m³]" #'water-m3))
        (:div
@@ -179,9 +189,6 @@ form {
         (:input :type "submit" :value "submit" :value "Confirm readings")))
       (:hr)
       (:p "Version: " (cl-who:esc *version-comment*))))))
-
-
-(defconstant +unix-epoch+ (encode-universal-time 0 0 0 1 1 1970 0))
 
 
 (defun parse-user-timestamp (s &optional time-zone)
@@ -369,17 +376,24 @@ form {
             #P"static/")
         *sma-inverter-host* (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_HOST")
         *sma-inverter-path* (uiop:getenv "CL_METER_READINGS_SMA_INVERTER_PATH")
+        *smart-meter* (or (uiop:getenv "CL_METER_READINGS_SMART_METER") "/dev/ttyUSB0")
+        sb-ext:*debug-print-variable-alist* (list* '(*print-length* . 10)
+                                                   '(*print-level* . 6)
+                                                   '(*print-pretty* . nil)
+                                                   sb-ext:*debug-print-variable-alist*)
         *sql-program* (or (uiop:getenv "CL_METER_READINGS_SQL_PROGRAM") "sqlite3 db.db"))
   (with-timed-logged-ignored-error ("Loading cache of DB at startup") (load-database-cache))
   (format t
           "~&*sma-inverter-host*=~S~
            ~&*sma-inverter-path*=~S~
+           ~&*smart-meter*=~S~
            ~&*static-assets-directory*=~S~
            ~&*sql-program*=~S~
            ~&*version-comment*=~S~
            ~&~D data points~&"
           *sma-inverter-host*
           *sma-inverter-path*
+          *smart-meter*
           *static-assets-directory*
           *sql-program*
           *version-comment*
@@ -390,6 +404,3 @@ form {
                                           :port 4242
                                           :document-root *static-assets-directory*))))
 
-(defun main-with-sleep ()
-  (main)
-  (sleep most-positive-fixnum))
