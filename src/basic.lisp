@@ -321,14 +321,17 @@ form {
                                                        #'water-m3))))))))))
       (:p (:a :href "/cl-meter-readings/form" "Enter new meter readings") ".")
       (when *data-points*
-        (let ((graphs '(("pv-prod" pv-prod "Total PV production")
-                        ("usage" usage "Electricity usage💡")
-                        ("gas-m3" gas-m3 "Gas")
-                        ("water-m3" water-m3 "Water")
-                        ("pv-2022-prod-kWh" pv-2022-prod-kWh "PV production (panels placed in 2022)")
-                        ("pv-2012-prod-kWh" pv-2012-prod-kWh "PV production (panels placed in 2012)")
-                        ("consumption" consumption "Electricity consumption💰")
-                        ("injection" injection "Electricity injection"))))
+        (let* ((graphs '(("pv-prod" pv-prod "Total PV production")
+                         ("usage" usage "Electricity usage💡")
+                         ("gas-m3" gas-m3 "Gas")
+                         ("water-m3" water-m3 "Water")
+                         ("pv-2022-prod-kWh" pv-2022-prod-kWh "PV production (panels placed in 2022)")
+                         ("pv-2012-prod-kWh" pv-2012-prod-kWh "PV production (panels placed in 2012)")
+                         ("consumption" consumption "Electricity consumption💰")
+                         ("injection" injection "Electricity injection")))
+               (monthly-timestamps (monthly-timestamps (- (get-universal-time) +unix-epoch+ (* (+ 95 366) 86400))))
+               (monthly-results (mapcar (lambda (xsor) (tabulate-interpolations monthly-timestamps *data-points* xsor))
+                                        '(pv-2012-prod-kWh pv-2022-prod-kWh consumption injection gas-m3 water-m3 pv-prod usage))))
           (cl-who:htm
            (:div (:canvas :id "myChart"))
            (:script "const ctx = document.getElementById('myChart');
@@ -349,8 +352,35 @@ form {
                             scales: {x: {'type': 'time'}}}};
                     new Chart(ctx, config);")
            (:ul
-            (loop for (reading _ label) in graphs do
-              (cl-who:htm (:li (:a :href (format nil "/cl-meter-readings/main?reading=~A" reading) (cl-who:esc label)))))))))
+            (loop :for (reading _ label) :in graphs :do
+              (cl-who:htm (:li (:a :href (format nil "/cl-meter-readings/main?reading=~A" reading) (cl-who:esc label))))))
+           (:table :style "border-collapse: collapse; border-bottom: solid 1px; border-top: solid 1px;"
+            (:thead :style "padding-bottom: 0px; padding-top: 0px;"
+             (:tr :style "border-bottom: solid 1.5px;"
+              (:th :style "border-right: solid 1px; border-left: solid 1px;" "Date")
+              (:th :style "border-right: solid 1px" :colspan 2 "PV 2012 [kWh]")
+              (:th :style "border-right: solid 1px" :colspan 2 "PV 2022 [kWh]")
+              (:th :style "border-right: solid 1px" :colspan 2 "Consumption [kWh]")
+              (:th :style "border-right: solid 1px" :colspan 2 "Injection [kWh]")
+              (:th :style "border-right: solid 1px" :colspan 2 "Gas [m³]")
+              (:th :style "border-right: solid 1px" :colspan 2 "Water [m³]")
+              (:th :style "border-right: solid 1px" :colspan 2 "PV prod [kWh]")
+              (:th :style "border-right: solid 1px" :colspan 2 "Usage [kWh]")))
+            (:tbody :style "text-align: right; padding-bottom: 0px; padding-top: 0px;"
+             (loop :for ts :in (cdr monthly-timestamps)
+                   :for (month . year) = (multiple-value-bind (_s _m _h _d mon yer)
+                                             (decode-universal-time (+ ts +unix-epoch+) 0)
+                                           (declare (ignore _s _m _h _d))
+                                           (cons mon yer))
+                   :for cursors = (mapcar #'cdr monthly-results) :then (mapcar #'cdr cursors)
+                   :do
+                      (cl-who:htm
+                       (:tr
+                        (:td :style "border-left: solid 1px; border-right: solid 1px;" (cl-who:str (format nil "01/~2,'0D/~D" month year)))
+                        (loop :for (val . diff) :in (mapcar #'car cursors)
+                              :do
+                                 (cl-who:htm (:td (cl-who:str (if val (format nil "~,1F" val) "?")))
+                                             (:td :style "border-right: solid 1px;" (cl-who:str (if diff (format nil "~,1F" diff) "?")))))))))))))
       (:hr)
       (:p "Version: " (cl-who:esc *version-comment*))))))
 

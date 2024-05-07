@@ -125,38 +125,40 @@ Useful scale values:
     (assert (equal (funcall fun (make-instance 'meter-reading-202303 :timestamp 4000)) 17d0))
     (assert (equal (funcall fun (make-instance 'meter-reading-202303 :timestamp 5000)) nil))))
 
+(defun get-xsor (xsor data-points)
+  (ecase xsor
+    (gas-m3 (values "Gas [m³/day] ~,1Fm³ → ~Fm³" #'gas-m3 86400))
+    (water-m3 (values "Water [l/day] ~,1Fm³ → ~Fm³" #'water-m3 86400e3))
+    (pv-2022-prod-kWh (values "PV 2022 [kW] ~,1FkWh → ~FkWh" #'pv-2022-prod-kWh 3600))
+    (pv-2012-prod-kWh (values "PV 2012 [kW] ~,1FkWh → ~FkWh" #'pv-2012-prod-kWh 3600))
+    (pv-prod (values "PV [kW] ~,1FkWh → ~,1FkWh"
+                     (make-multi-accessor data-points #'+ #'pv-2022-prod-kWh #'pv-2012-prod-kWh)
+                     3600))
+    (usage (values "Usage💡 [kW] ~,1FkWh → ~,1FkWh"
+                   (make-multi-accessor data-points
+                                        (lambda (pv-2022 pv-2012 peak-conso off-conso peak-inj off-inj)
+                                          (- (+ pv-2022 pv-2012 peak-conso off-conso)
+                                             (+ peak-inj off-inj)))
+                                        #'pv-2022-prod-kWh #'pv-2012-prod-kWh
+                                        #'peak-hour-consumption-kWh #'off-hour-consumption-kWh
+                                        #'peak-hour-injection-kWh #'off-hour-injection-kWh)
+                   3600))
+    (consumption (values "Consumption💰 [kW] ~,1FkWh → ~,1FkWh"
+                         (make-multi-accessor data-points #'+ #'peak-hour-consumption-kWh #'off-hour-consumption-kWh)
+                         3600))
+    (injection (values "Injection [kW] ~,1FkWh → ~,1FkWh"
+                       (make-multi-accessor data-points #'+ #'peak-hour-injection-kWh #'off-hour-injection-kWh)
+                       3600))
+    (peak-hour-injection-kWh (values "Peak Hour Injection [kW] ~,1FkWh → ~FkWh"
+                                     #'peak-hour-injection-kWh
+                                     3600))
+    (off-hour-injection-kWh (values "Off Hour Injection [kW] ~,1FkWh → ~FkWh"
+                                    #'off-hour-injection-kWh
+                                    3600))))
 
 (defun write-chart-config (data-points xsor &optional (stream *standard-output*))
   (multiple-value-bind (format-string xsor-fun scale)
-      (ecase xsor
-        (gas-m3 (values "Gas [m³/day] ~,1Fm³ → ~Fm³" #'gas-m3 86400))
-        (water-m3 (values "Water [l/day] ~,1Fm³ → ~Fm³" #'water-m3 86400e3))
-        (pv-2022-prod-kWh (values "PV 2022 [kW] ~,1FkWh → ~FkWh" #'pv-2022-prod-kWh 3600))
-        (pv-2012-prod-kWh (values "PV 2012 [kW] ~,1FkWh → ~FkWh" #'pv-2012-prod-kWh 3600))
-        (pv-prod (values "PV [kW] ~,1FkWh → ~,1FkWh"
-                         (make-multi-accessor data-points #'+ #'pv-2022-prod-kWh #'pv-2012-prod-kWh)
-                         3600))
-        (usage (values "Usage💡 [kW] ~,1FkWh → ~,1FkWh"
-                       (make-multi-accessor data-points
-                                            (lambda (pv-2022 pv-2012 peak-conso off-conso peak-inj off-inj)
-                                              (- (+ pv-2022 pv-2012 peak-conso off-conso)
-                                                 (+ peak-inj off-inj)))
-                                            #'pv-2022-prod-kWh #'pv-2012-prod-kWh
-                                            #'peak-hour-consumption-kWh #'off-hour-consumption-kWh
-                                            #'peak-hour-injection-kWh #'off-hour-injection-kWh)
-                       3600))
-        (consumption (values "Consumption💰 [kW] ~,1FkWh → ~,1FkWh"
-                             (make-multi-accessor data-points #'+ #'peak-hour-consumption-kWh #'off-hour-consumption-kWh)
-                             3600))
-        (injection (values "Injection [kW] ~,1FkWh → ~,1FkWh"
-                           (make-multi-accessor data-points #'+ #'peak-hour-injection-kWh #'off-hour-injection-kWh)
-                           3600))
-        (peak-hour-injection-kWh (values "Peak Hour Injection [kW] ~,1FkWh → ~FkWh"
-                                         #'peak-hour-injection-kWh
-                                         3600))
-        (off-hour-injection-kWh (values "Off Hour Injection [kW] ~,1FkWh → ~FkWh"
-                                        #'off-hour-injection-kWh
-                                        3600)))
+      (get-xsor xsor data-points)
     (multiple-value-bind (timestamps-10s values first-value last-value)
         (make-chart-data-raw data-points xsor-fun scale)
       (write-string "{labels:[" stream)
@@ -265,3 +267,46 @@ Useful scale values:
       (assert (equal values '(1f0)))
       (assert (equal first-val 9d0))
       (assert (equal last-val 10d0)))))
+
+
+(defun monthly-timestamps (minimum-timestamp)
+  (loop :with max-timestamp = (reading-timestamp (aref *data-points* (1- (length *data-points*))))
+        :with year = 2013
+        :for month = 1 :then (if (= month 12) (progn (incf year) 1) (1+ month))
+        :for timestamp = (- (encode-universal-time 0 0 0 1 month year 0) +unix-epoch+)
+        :while (<= timestamp max-timestamp)
+        :when (>= timestamp minimum-timestamp)
+          :collect timestamp))
+
+
+(defun tabulate-interpolations (timestamps data-points xsor)
+  (loop :with xsor = (if (fboundp xsor)
+                         xsor
+                         (multiple-value-bind (_ multi-xsor)
+                             (get-xsor xsor data-points)
+                           (declare (ignore _))
+                           multi-xsor))
+        :with start = (position-if xsor data-points)
+        :with last-idx
+        :with previous-value
+        :with last-ts
+        :with first-ts = (reading-timestamp (aref data-points start))
+        :with end
+          :initially
+             (unless start
+               (error "No data to tabulate"))
+             (setf last-idx (position-if xsor data-points :from-end t))
+             (unless (and last-idx (< start last-idx))
+               (error "No data to tabulate"))
+             (setf last-ts (reading-timestamp (aref data-points last-idx))
+                   end (1+ last-idx))
+        :for ts in timestamps
+        :collect (multiple-value-bind (value next-start _)
+                     (handler-case
+                         (interpolate-meter-readings data-points ts xsor :start start :end end)
+                       (error (_) (declare (ignore _)) (values nil start)))
+                   (declare (ignore _))
+                   (prog1
+                       (cons value (when (and value previous-value) (- value previous-value)))
+                     (setf start next-start
+                           previous-value value)))))
