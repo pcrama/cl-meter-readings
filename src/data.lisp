@@ -28,7 +28,6 @@
   (format stream "#<METER-READING-202208")
   (loop for slot-name in '(timestamp pv-2012-prod-kWh pv-2022-prod-kWh
                            peak-hour-consumption-kWh off-hour-consumption-kWh
-                           peak-hour-injection-kWh off-hour-injection-kWh
                            gas-m3 water-m3)
         when (slot-boundp x slot-name) do
         (let ((value (slot-value x slot-name)))
