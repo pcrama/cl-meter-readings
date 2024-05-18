@@ -328,10 +328,7 @@ form {
                          ("pv-2022-prod-kWh" pv-2022-prod-kWh "PV production (panels placed in 2022)")
                          ("pv-2012-prod-kWh" pv-2012-prod-kWh "PV production (panels placed in 2012)")
                          ("consumption" consumption "Electricity consumption💰")
-                         ("injection" injection "Electricity injection")))
-               (monthly-timestamps (monthly-timestamps (- (get-universal-time) +unix-epoch+ (* (+ 95 366) 86400))))
-               (monthly-results (mapcar (lambda (xsor) (tabulate-interpolations monthly-timestamps *data-points* xsor))
-                                        '(pv-2012-prod-kWh pv-2022-prod-kWh consumption injection gas-m3 water-m3 pv-prod usage))))
+                         ("injection" injection "Electricity injection"))))
           (cl-who:htm
            (:div (:canvas :id "myChart"))
            (:script "const ctx = document.getElementById('myChart');
@@ -353,7 +350,33 @@ form {
                     new Chart(ctx, config);")
            (:ul
             (loop :for (reading _ label) :in graphs :do
-              (cl-who:htm (:li (:a :href (format nil "/cl-meter-readings/main?reading=~A" reading) (cl-who:esc label))))))
+              (cl-who:htm (:li (:a :href (format nil "/cl-meter-readings/main?reading=~A" reading) (cl-who:esc label)))))))))
+      (:p (:a :href "/cl-meter-readings/monthly" "See monthly consumption statistics") ".")
+      (:hr)
+      (:p "Version: " (cl-who:esc *version-comment*))))))
+
+(hunchentoot:define-easy-handler (monthly-page :uri "/cl-meter-readings/monthly")
+    ()
+  (with-timed-logged-ignored-error ("Loading database cache failed")
+    (unless *data-points* (load-database-cache)))
+  (cl-who:with-html-output-to-string (*standard-output* nil :prologue t)
+    (:html
+     (:head
+      (:meta :charset "UTF-8")
+      (:meta :name "viewport" :content "width=device-width,initial-scale=1")
+      (:title "Input meter readings")
+      (:link :rel "apple-touch-icon" :sizes "180x180" :href "/cl-meter-readings/apple-touch-icon.png")
+      (:link :rel "icon" :type "image/png" :sizes "32x32" :href "/cl-meter-readings/favicon-32x32.png")
+      (:link :rel "icon" :type "image/png" :sizes "16x16" :href "/cl-meter-readings/favicon-16x16.png")
+      (:link :rel "manifest" :href "/cl-meter-readings/site.webmanifest")
+      (:style (cl-who:str +css-styling+)))
+     (:body
+      (if *data-points*
+        (let* ((monthly-timestamps (monthly-timestamps (- (get-universal-time) +unix-epoch+ (* (+ 95 366) 86400))))
+               (monthly-results (mapcar (lambda (xsor) (tabulate-interpolations monthly-timestamps *data-points* xsor))
+                                        '(pv-2012-prod-kWh pv-2022-prod-kWh consumption injection gas-m3 water-m3 pv-prod usage))))
+          (cl-who:htm
+           (:h1 "Monthly consumption")
            (:table :style "border-collapse: collapse; border-bottom: solid 1px; border-top: solid 1px;"
             (:thead :style "padding-bottom: 0px; padding-top: 0px;"
              (:tr :style "border-bottom: solid 1.5px;"
@@ -380,7 +403,9 @@ form {
                         (loop :for (val . diff) :in (mapcar #'car cursors)
                               :do
                                  (cl-who:htm (:td (cl-who:str (if val (format nil "~,1F" val) "?")))
-                                             (:td :style "border-right: solid 1px;" (cl-who:str (if diff (format nil "~,1F" diff) "?")))))))))))))
+                                             (:td :style "border-right: solid 1px; border-left: dotted 1px grey;"
+                                                  (cl-who:str (if diff (format nil "~,1F" diff) "?"))))))))))))
+        (cl-who:htm (:p "No data available")))
       (:hr)
       (:p "Version: " (cl-who:esc *version-comment*))))))
 
