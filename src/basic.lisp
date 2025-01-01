@@ -391,21 +391,22 @@ form {
               (:th :style "border-right: solid 1px" :colspan 2 "Usage [kWh]")))
             (:tbody :style "text-align: right; padding-bottom: 0px; padding-top: 0px;"
              (loop :for ts :in (cdr monthly-timestamps)
-                   :for (month . year) = (multiple-value-bind (_s _m _h _d mon yer)
-                                             (decode-universal-time (+ ts +unix-epoch+) 0)
-                                           (declare (ignore _s _m _h _d))
-                                           (cons mon yer))
+                   :for (day . (month . year)) = (multiple-value-bind (_s _m _h dai mon yer)
+                                                     (decode-universal-time (+ ts +unix-epoch+ -1) 0)
+                                                   (declare (ignore _s _m _h))
+                                                   (cons dai (cons mon yer)))
                    :for cursors = (mapcar #'cdr monthly-results) :then (mapcar #'cdr cursors)
                    :do
                       (cl-who:htm
                        (:tr
-                        (:td :style "border-left: solid 1px; border-right: solid 1px;" (cl-who:str (format nil "01/~2,'0D/~D" month year)))
+                        (:td :style "border-left: solid 1px; border-right: solid 1px;" (cl-who:str (format nil "~2,'0D/~2,'0D/~D" day month year)))
                         (loop :for (val . diff) :in (mapcar #'car cursors)
                               :do
                                  (cl-who:htm (:td (cl-who:str (if val (format nil "~,1F" val) "?")))
                                              (:td :style "border-right: solid 1px; border-left: dotted 1px grey;"
                                                   (cl-who:str (if diff (format nil "~,1F" diff) "?"))))))))))))
         (cl-who:htm (:p "No data available")))
+      (:p (:a :href "/cl-meter-readings/main" "Return to main page") ".")
       (:hr)
       (:p "Version: " (cl-who:esc *version-comment*))))))
 
