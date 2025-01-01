@@ -352,6 +352,7 @@ form {
             (loop :for (reading _ label) :in graphs :do
               (cl-who:htm (:li (:a :href (format nil "/cl-meter-readings/main?reading=~A" reading) (cl-who:esc label)))))))))
       (:p (:a :href "/cl-meter-readings/monthly" "See monthly consumption statistics") ".")
+      (:p (:a :href "/cl-meter-readings/yearly" "See yearly consumption statistics") ".")
       (:hr)
       (:p "Version: " (cl-who:esc *version-comment*))))))
 
@@ -407,6 +408,63 @@ form {
                                                   (cl-who:str (if diff (format nil "~,1F" diff) "?"))))))))))))
         (cl-who:htm (:p "No data available")))
       (:p (:a :href "/cl-meter-readings/main" "Return to main page") ".")
+      (:p (:a :href "/cl-meter-readings/yearly" "See yearly consumption statistics") ".")
+      (:hr)
+      (:p "Version: " (cl-who:esc *version-comment*))))))
+
+(hunchentoot:define-easy-handler (yearly-page :uri "/cl-meter-readings/yearly")
+    ()
+  (with-timed-logged-ignored-error ("Loading database cache failed")
+    (unless *data-points* (load-database-cache)))
+  (cl-who:with-html-output-to-string (*standard-output* nil :prologue t)
+    (:html
+     (:head
+      (:meta :charset "UTF-8")
+      (:meta :name "viewport" :content "width=device-width,initial-scale=1")
+      (:title "Input meter readings")
+      (:link :rel "apple-touch-icon" :sizes "180x180" :href "/cl-meter-readings/apple-touch-icon.png")
+      (:link :rel "icon" :type "image/png" :sizes "32x32" :href "/cl-meter-readings/favicon-32x32.png")
+      (:link :rel "icon" :type "image/png" :sizes "16x16" :href "/cl-meter-readings/favicon-16x16.png")
+      (:link :rel "manifest" :href "/cl-meter-readings/site.webmanifest")
+      (:style (cl-who:str +css-styling+)))
+     (:body
+      (if *data-points*
+        (let* ((yearly-timestamps (yearly-timestamps (- (encode-universal-time 0 0 0 1 1 2014) +unix-epoch+)))
+               (yearly-results (mapcar (lambda (xsor) (tabulate-interpolations yearly-timestamps *data-points* xsor))
+                                        '(pv-2012-prod-kWh pv-2022-prod-kWh consumption injection gas-m3 water-m3 pv-prod usage))))
+          (cl-who:htm
+           (:h1 "Yearly consumption")
+           (:table :style "border-collapse: collapse; border-bottom: solid 1px; border-top: solid 1px;"
+            (:thead :style "padding-bottom: 0px; padding-top: 0px;"
+             (:tr :style "border-bottom: solid 1.5px;"
+              (:th :style "border-right: solid 1px; border-left: solid 1px;" "Date")
+              (:th :style "border-right: solid 1px" :colspan 2 "PV 2012 [kWh]")
+              (:th :style "border-right: solid 1px" :colspan 2 "PV 2022 [kWh]")
+              (:th :style "border-right: solid 1px" :colspan 2 "Consumption [kWh]")
+              (:th :style "border-right: solid 1px" :colspan 2 "Injection [kWh]")
+              (:th :style "border-right: solid 1px" :colspan 2 "Gas [m³]")
+              (:th :style "border-right: solid 1px" :colspan 2 "Water [m³]")
+              (:th :style "border-right: solid 1px" :colspan 2 "PV prod [kWh]")
+              (:th :style "border-right: solid 1px" :colspan 2 "Usage [kWh]")))
+            (:tbody :style "text-align: right; padding-bottom: 0px; padding-top: 0px;"
+             (loop :for ts :in (cdr yearly-timestamps)
+                   :for (day . (month . year)) = (multiple-value-bind (_s _m _h dai mon yer)
+                                                     (decode-universal-time (+ ts +unix-epoch+ -1) 0)
+                                                   (declare (ignore _s _m _h))
+                                                   (cons dai (cons mon yer)))
+                   :for cursors = (mapcar #'cdr yearly-results) :then (mapcar #'cdr cursors)
+                   :do
+                      (cl-who:htm
+                       (:tr
+                        (:td :style "border-left: solid 1px; border-right: solid 1px;" (cl-who:str (format nil "~2,'0D/~2,'0D/~D" day month year)))
+                        (loop :for (val . diff) :in (mapcar #'car cursors)
+                              :do
+                                 (cl-who:htm (:td (cl-who:str (if val (format nil "~,1F" val) "?")))
+                                             (:td :style "border-right: solid 1px; border-left: dotted 1px grey;"
+                                                  (cl-who:str (if diff (format nil "~,1F" diff) "?"))))))))))))
+        (cl-who:htm (:p "No data available")))
+      (:p (:a :href "/cl-meter-readings/main" "Return to main page") ".")
+      (:p (:a :href "/cl-meter-readings/monthly" "See monthly consumption statistics") ".")
       (:hr)
       (:p "Version: " (cl-who:esc *version-comment*))))))
 

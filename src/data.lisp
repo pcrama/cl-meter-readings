@@ -48,6 +48,20 @@
    (water-m3 :initarg :water-m3 :initform nil :accessor water-m3 :documentation "Water [m³]")))
 
 
+(defmethod peak-hour-injection-kWh ((x meter-reading-202208))
+  ;; For compatibility between `meter-reading-202208' and `meter-reading-202303'
+  ;; NB: this biases towards believing in perfect auto-consumption but without
+  ;; a bidirectional power meter, we don't know anyway.
+  0)
+
+
+(defmethod off-hour-injection-kWh ((x meter-reading-202208))
+  ;; For compatibility between `meter-reading-202208' and `meter-reading-202303'
+  ;; NB: this biases towards believing in perfect auto-consumption but without
+  ;; a bidirectional power meter, we don't know anyway.
+  0)
+
+
 (defmethod print-object ((x meter-reading-202303) stream)
   (format stream "#<METER-READING-202303")
   (loop for slot-name in '(timestamp pv-2012-prod-kWh pv-2022-prod-kWh

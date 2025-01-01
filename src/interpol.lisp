@@ -279,6 +279,15 @@ Useful scale values:
           :collect timestamp))
 
 
+(defun yearly-timestamps (minimum-timestamp)
+  (loop :with max-timestamp = (reading-timestamp (aref *data-points* (1- (length *data-points*))))
+        :for year :from 2013
+        :for timestamp = (- (encode-universal-time 0 0 0 1 1 year 0) +unix-epoch+)
+        :while (<= timestamp max-timestamp)
+        :when (>= timestamp minimum-timestamp)
+          :collect timestamp))
+
+
 (defun tabulate-interpolations (timestamps data-points xsor)
   (loop :with xsor = (if (fboundp xsor)
                          xsor
